@@ -12,7 +12,7 @@ Flask-Login==0.6.3            # Quản lý phiên đăng nhập
 # SQLite đã có sẵn trong Python, không cần cài thêm
 
 # --- Computer Vision & AI ---
-opencv-python==4.11.0.86      # Xử lý hình ảnh/video từ camera
+opencv-python-headless==4.11.0.86      # Xử lý hình ảnh/video từ camera (bản headless dùng cho Server)
 mediapipe==0.10.35            # Nhận diện tư thế cơ thể (Pose Detection)
 
 # --- Telegram Bot (gửi cảnh báo) ---

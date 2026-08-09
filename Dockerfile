@@ -1,21 +1,15 @@
-# Sử dụng base image Python 3.11-slim (Debian)
-FROM python:3.11-slim
+# Sử dụng base image Python 3.11-slim-bookworm (Debian mới nhất, ổn định hơn)
+FROM python:3.11-slim-bookworm
 
 # Thiết lập thư mục làm việc trong container
 WORKDIR /app
 
 # Đặt các biến môi trường
-# PYTHONUNBUFFERED=1 giúp log print hiển thị ngay lập tức trong console
-# PYTHONDONTWRITEBYTECODE=1 ngăn Python ghi các file .pyc
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1
 
-# Cài đặt các thư viện hệ thống cần thiết cho OpenCV và MediaPipe
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    libgl1-mesa-glx \
-    libglib2.0-0 \
-    libgomp1 \
-    && rm -rf /var/lib/apt/lists/*
+# Không cần cài các thư viện đồ họa hệ thống (như libgl1-mesa-glx)
+# do chúng ta đã chuyển sang sử dụng opencv-python-headless trong requirements.txt
 
 # Sao chép file requirements.txt trước để tận dụng Docker cache
 COPY requirements.txt .
