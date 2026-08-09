@@ -11,6 +11,7 @@ Flask-Login==0.6.3            # Quản lý phiên đăng nhập
 # --- Database ---
 # SQLite đã có sẵn trong Python. Thêm PyMySQL để kết nối MySQL Cloud.
 PyMySQL==1.1.1
+cryptography==42.0.5          # Bắt buộc để giải mã mật khẩu caching_sha2_password của MySQL 8.0 (Aiven)
 
 # --- Computer Vision & AI ---
 opencv-python-headless==4.11.0.86      # Xử lý hình ảnh/video từ camera (bản headless dùng cho Server)
