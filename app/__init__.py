@@ -28,11 +28,19 @@ def create_app():
     # --- Cấu hình cơ bản ---
     flask_app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'dev-key-fallback')
 
-    # Đường dẫn database SQLite (tạo tự động nếu chưa có)
-    db_path = os.path.abspath(
-        os.path.join(os.path.dirname(__file__), '..', 'database', 'lab_monitor.db')
-    )
-    flask_app.config['SQLALCHEMY_DATABASE_URI'] = f'sqlite:///{db_path}'
+    # Lấy đường dẫn CSDL từ biến môi trường (Render, Cloud...)
+    db_url = os.getenv('DATABASE_URL')
+    if db_url:
+        # Đảm bảo SQLAlchemy sử dụng PyMySQL để kết nối
+        if db_url.startswith('mysql://'):
+            db_url = db_url.replace('mysql://', 'mysql+pymysql://', 1)
+        flask_app.config['SQLALCHEMY_DATABASE_URI'] = db_url
+    else:
+        # Fallback về SQLite khi chạy trên máy cá nhân
+        db_path = os.path.abspath(
+            os.path.join(os.path.dirname(__file__), '..', 'database', 'lab_monitor.db')
+        )
+        flask_app.config['SQLALCHEMY_DATABASE_URI'] = f'sqlite:///{db_path}'
     flask_app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False  # Tắt để tránh cảnh báo
 
     # --- Gắn extension vào flask_app ---

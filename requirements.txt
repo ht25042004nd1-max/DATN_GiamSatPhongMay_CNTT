@@ -9,7 +9,8 @@ Flask-SQLAlchemy==3.1.1       # ORM để thao tác SQLite dễ hơn
 Flask-Login==0.6.3            # Quản lý phiên đăng nhập
 
 # --- Database ---
-# SQLite đã có sẵn trong Python, không cần cài thêm
+# SQLite đã có sẵn trong Python. Thêm PyMySQL để kết nối MySQL Cloud.
+PyMySQL==1.1.1
 
 # --- Computer Vision & AI ---
 opencv-python-headless==4.11.0.86      # Xử lý hình ảnh/video từ camera (bản headless dùng cho Server)
