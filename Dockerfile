@@ -25,5 +25,5 @@ RUN python download_model.py
 
 # Bỏ EXPOSE 5000 vì Render sẽ tự động gán biến môi trường PORT và quản lý port mạng
 
-# Chạy script tạo admin trước, sau đó mới chạy server
-CMD ["/bin/sh", "-c", "python create_admin.py && python run.py"]
+# Chạy script tạo admin trước, sau đó khởi chạy web server bằng gunicorn (bền bỉ hơn flask run)
+CMD ["/bin/sh", "-c", "python create_admin.py && gunicorn --bind 0.0.0.0:$PORT run:app"]

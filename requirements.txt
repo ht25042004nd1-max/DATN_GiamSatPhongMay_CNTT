@@ -7,6 +7,7 @@
 Flask==3.1.1                  # Backend chính
 Flask-SQLAlchemy==3.1.1       # ORM để thao tác SQLite dễ hơn
 Flask-Login==0.6.3            # Quản lý phiên đăng nhập
+gunicorn==21.2.0              # Web server chịu tải tốt cho môi trường Production (Render)
 
 # --- Database ---
 # SQLite đã có sẵn trong Python. Thêm PyMySQL để kết nối MySQL Cloud.
