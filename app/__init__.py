@@ -31,10 +31,19 @@ def create_app():
     # Lấy đường dẫn CSDL từ biến môi trường (Render, Cloud...)
     db_url = os.getenv('DATABASE_URL')
     if db_url:
+        # Aiven thêm ?ssl-mode=REQUIRED vào cuối, nhưng PyMySQL không hiểu tham số này. Ta cần cắt nó đi.
+        if '?ssl-mode=' in db_url:
+            db_url = db_url.split('?')[0]
+
         # Đảm bảo SQLAlchemy sử dụng PyMySQL để kết nối
         if db_url.startswith('mysql://'):
             db_url = db_url.replace('mysql://', 'mysql+pymysql://', 1)
+        
         flask_app.config['SQLALCHEMY_DATABASE_URI'] = db_url
+        
+        # Bắt buộc bật SSL (Aiven yêu cầu) nhưng bỏ qua việc tải file chứng chỉ rườm rà
+        if 'mysql+pymysql' in db_url:
+            flask_app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {'connect_args': {'ssl': {}}}
     else:
         # Fallback về SQLite khi chạy trên máy cá nhân
         db_path = os.path.abspath(
