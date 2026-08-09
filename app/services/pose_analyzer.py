@@ -354,16 +354,16 @@ class PoseAnalyzer:
 
         if angle_knee < ANGLE_KNEELING_MAX:
             conf = min(1.0, (ANGLE_KNEELING_MAX - angle_knee) / ANGLE_KNEELING_MAX)
-            return 'Quy', round(conf * 100, 1)
+            return 'Quy', float(round(conf * 100, 1))
         if angle_trunk < ANGLE_BOWING_MAX:
             conf = min(1.0, (ANGLE_BOWING_MAX - angle_trunk) / ANGLE_BOWING_MAX)
-            return 'Cui nguoi', round(conf * 100, 1)
+            return 'Cui nguoi', float(round(conf * 100, 1))
         if ANGLE_SITTING_MIN <= angle_hip <= ANGLE_STANDING_MIN:
             dist = abs(angle_hip - 110)
             conf = max(0.3, 1.0 - dist / 50)
-            return 'Ngoi', round(conf * 100, 1)
+            return 'Ngoi', float(round(conf * 100, 1))
         conf = min(1.0, max(0.5, (angle_hip - ANGLE_STANDING_MIN) / 40 + 0.5))
-        return 'Dung', round(conf * 100, 1)
+        return 'Dung', float(round(conf * 100, 1))
 
     def _smooth_label(self, pid: int, label: str) -> str:
         if pid not in self._smooth_hist:
@@ -406,7 +406,7 @@ class PoseAnalyzer:
 
                 # Tọa độ hông chuẩn hóa
                 hl = lms[IDX_LEFT_HIP];  hr = lms[IDX_RIGHT_HIP]
-                all_hips.append(((hl.x + hr.x) / 2, (hl.y + hr.y) / 2))
+                all_hips.append((float((hl.x + hr.x) / 2), float((hl.y + hr.y) / 2)))
 
         # Cập nhật CentroidTracker
         tracked = self._tracker.update(rects)  # {pid: (cx,cy,x1,y1,x2,y2)}
