@@ -294,3 +294,8 @@ def audit_logs():
 @admin_required
 def iot():
     return render_template('iot.html', active_page='iot')
+
+@main_bp.route('/streamer/<int:camera_id>')
+@login_required
+def streamer(camera_id):
+    return render_template('streamer.html', camera_id=camera_id, active_page='cameras')

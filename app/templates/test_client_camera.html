@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+
+{% block title %}Thử nghiệm Camera Client{% endblock %}
+
+{% block content %}
+<div class="content-wrapper">
+    <section class="content-header">
+        <div class="container-fluid">
+            <div class="row mb-2">
+                <div class="col-sm-6">
+                    <h1><i class="fas fa-camera text-primary"></i> Thử nghiệm Camera Thiết Bị</h1>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="content">
+        <div class="container-fluid">
+            <div class="row">
+                <div class="col-md-8 mx-auto">
+                    <div class="card card-primary card-outline">
+                        <div class="card-header">
+                            <h3 class="card-title">Truy cập Camera Trực Tiếp từ Trình Duyệt</h3>
+                        </div>
+                        <div class="card-body text-center">
+                            <p class="text-muted">Nhấn nút bên dưới để cấp quyền cho trình duyệt truy cập vào camera trên thiết bị của bạn (điện thoại/laptop).</p>
+                            
+                            <video id="client-video" autoplay playsinline style="width: 100%; max-width: 600px; background-color: #000; border-radius: 8px; margin-bottom: 20px;"></video>
+                            <br>
+                            <button id="start-camera" class="btn btn-success btn-lg"><i class="fas fa-video"></i> Bật Camera</button>
+                            <button id="stop-camera" class="btn btn-danger btn-lg" style="display: none;"><i class="fas fa-stop"></i> Tắt Camera</button>
+                            
+                            <div id="error-message" class="alert alert-danger mt-3" style="display: none;"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    const videoElement = document.getElementById('client-video');
+    const startBtn = document.getElementById('start-camera');
+    const stopBtn = document.getElementById('stop-camera');
+    const errorMsg = document.getElementById('error-message');
+    let currentStream = null;
+
+    startBtn.addEventListener('click', async () => {
+        try {
+            // Yêu cầu quyền truy cập camera từ trình duyệt
+            const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+            videoElement.srcObject = stream;
+            currentStream = stream;
+            
+            startBtn.style.display = 'none';
+            stopBtn.style.display = 'inline-block';
+            errorMsg.style.display = 'none';
+        } catch (err) {
+            console.error("Lỗi khi truy cập camera:", err);
+            errorMsg.textContent = "Không thể truy cập camera. Vui lòng kiểm tra quyền trên trình duyệt: " + err.message;
+            errorMsg.style.display = 'block';
+        }
+    });
+
+    stopBtn.addEventListener('click', () => {
+        if (currentStream) {
+            currentStream.getTracks().forEach(track => track.stop());
+            videoElement.srcObject = null;
+            currentStream = null;
+            
+            startBtn.style.display = 'inline-block';
+            stopBtn.style.display = 'none';
+        }
+    });
+</script>
+{% endblock %}
