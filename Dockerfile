@@ -23,8 +23,7 @@ COPY . .
 # Tải model MediaPipe về trước để chứa sẵn trong image (tránh tải lại khi chạy container)
 RUN python download_model.py
 
-# Expose cổng 5000 mà Flask lắng nghe
-EXPOSE 5000
+# Bỏ EXPOSE 5000 vì Render sẽ tự động gán biến môi trường PORT và quản lý port mạng
 
 # Chạy script tạo admin trước, sau đó mới chạy server
 CMD ["/bin/sh", "-c", "python create_admin.py && python run.py"]
