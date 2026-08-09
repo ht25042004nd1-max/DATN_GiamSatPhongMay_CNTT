@@ -1,0 +1,55 @@
+/* ============================================================
+   static/css/main.css — CSS toàn cục cho dự án
+   Nội dung chi tiết sẽ được thêm ở giai đoạn UI
+   ============================================================ */
+
+/* Reset cơ bản */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background-color: #f5f5f5;
+    color: #333;
+    min-height: 100vh;
+}
+
+/* Navigation bar */
+#navbar {
+    background-color: #2c3e50;
+    color: white;
+    padding: 15px 20px;
+    display: flex;
+    align-items: center;
+}
+
+.nav-brand {
+    font-size: 1.2rem;
+    font-weight: bold;
+}
+
+/* Khu vực nội dung chính */
+#main-content {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px;
+}
+
+/* Thông báo flash */
+.flash-messages {
+    padding: 10px 20px;
+}
+
+.alert {
+    padding: 10px 15px;
+    border-radius: 4px;
+    margin-bottom: 10px;
+}
+
+.alert-success { background-color: #d4edda; color: #155724; }
+.alert-danger  { background-color: #f8d7da; color: #721c24; }
+.alert-warning { background-color: #fff3cd; color: #856404; }
+.alert-info    { background-color: #d1ecf1; color: #0c5460; }

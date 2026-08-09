@@ -1,0 +1,171 @@
+{% extends "base.html" %}
+{% block title %}Quản lý Dataset AI — VIU Lab Monitor{% endblock %}
+{% block header_title %}Quản lý & Đóng gói Dataset AI{% endblock %}
+{% block title_sub %}AI Dataset Manager{% endblock %}
+
+{% block content %}
+<div class="row mb-3">
+    <div class="col-md-6">
+        <div class="btn-group" role="group">
+            <button class="btn btn-outline-primary active btn-filter" onclick="filterSamples('all', this)">Tất cả mẫu</button>
+            <button class="btn btn-outline-primary btn-filter" onclick="filterSamples('Quy', this)">Quỳ</button>
+            <button class="btn btn-outline-primary btn-filter" onclick="filterSamples('Cui nguoi', this)">Cúi người</button>
+            <button class="btn btn-outline-primary btn-filter" onclick="filterSamples('Ngoi', this)">Ngồi</button>
+        </div>
+    </div>
+    <div class="col-md-6 text-right">
+        <button class="btn btn-success" onclick="downloadZip()">
+            <i class="fas fa-file-archive mr-1"></i> Tải trọn bộ Dataset (ZIP)
+        </button>
+    </div>
+</div>
+
+<div class="row" id="dataset-gallery">
+    <div class="col-12 text-center text-muted py-5">
+        <i class="fas fa-spinner fa-spin fa-2x mb-2"></i><br>Đang tải tập dữ liệu mẫu...
+    </div>
+</div>
+
+<!-- Modal Xem Chi tiết Annotation -->
+<div class="modal fade" id="modalSampleDetail" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-navy text-white">
+                <h5 class="modal-title"><i class="fas fa-info-circle mr-2"></i>Chi tiết Mẫu Dataset</h5>
+                <button type="button" class="close text-white" data-dismiss="modal"><span>&times;</span></button>
+            </div>
+            <div class="modal-body">
+                <div class="row">
+                    <div class="col-md-7">
+                        <img id="detail-sample-img" src="" class="img-fluid rounded border w-100" style="object-fit: contain; max-height: 400px;">
+                    </div>
+                    <div class="col-md-5">
+                        <h5 class="font-weight-bold text-primary" id="detail-sample-label">--</h5>
+                        <p class="text-sm text-muted" id="detail-sample-time">--</p>
+                        <hr>
+                        <p><strong>Camera ID:</strong> <span id="detail-sample-cam">--</span></p>
+                        <p><strong>Độ tin cậy AI:</strong> <span id="detail-sample-conf">--%</span></p>
+                        <p><strong>Ghi chú:</strong> <span id="detail-sample-note">--</span></p>
+                        <hr>
+                        <p><strong>File Metadata (.json):</strong></p>
+                        <pre id="detail-sample-json" class="bg-dark text-light p-2 rounded text-xs" style="max-height: 180px; overflow-y: auto;"></pre>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-danger btn-sm" id="btn-delete-sample" onclick="confirmDeleteSample()">
+                    <i class="fas fa-trash mr-1"></i> Xóa mẫu này
+                </button>
+                <button class="btn btn-secondary btn-sm" data-dismiss="modal">Đóng</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    let allSamples = [];
+    let currentSampleId = null;
+
+    function loadSamples() {
+        $.ajax({
+            url: '/api/dataset/samples',
+            success: function(samples) {
+                allSamples = samples;
+                renderSamples(allSamples);
+            },
+            error: function() {
+                $('#dataset-gallery').html('<div class="col-12 text-center text-danger py-5"><i class="fas fa-exclamation-triangle fa-2x mb-2"></i><br>Không thể tải dữ liệu Dataset</div>');
+            }
+        });
+    }
+
+    function renderSamples(samples) {
+        if (!samples || samples.length === 0) {
+            $('#dataset-gallery').html('<div class="col-12 text-center text-muted py-5"><i class="fas fa-folder-open fa-2x mb-2"></i><br>Chưa có mẫu Dataset nào. Hãy bấm "📸 Chụp Dataset" trên trang Giám sát.</div>');
+            return;
+        }
+
+        let html = '';
+        samples.forEach(s => {
+            let poseBadge = 'badge-primary';
+            if (s.user_label === 'Quy') poseBadge = 'badge-danger';
+            else if (s.user_label === 'Cui nguoi') poseBadge = 'badge-warning';
+
+            let imgUrl = '/static/uploads/dataset/' + s.image_filename;
+            html += `
+                <div class="col-md-3 col-sm-6 mb-4">
+                    <div class="card h-100 shadow-sm border">
+                        <img src="${imgUrl}" class="card-img-top" style="height: 180px; object-fit: cover; cursor: pointer;" onclick="openSampleDetail('${s.id}')">
+                        <div class="card-body p-2">
+                            <span class="badge ${poseBadge}">${s.user_label}</span>
+                            <span class="badge badge-secondary float-right">${(s.confidence * 100).toFixed(0)}% AI</span>
+                            <small class="d-block text-muted mt-1"><i class="fas fa-clock mr-1"></i>${s.timestamp ? s.timestamp.replace('T', ' ').substring(0, 19) : ''}</small>
+                        </div>
+                        <div class="card-footer p-2 text-right bg-white">
+                            <button class="btn btn-xs btn-outline-info" onclick="openSampleDetail('${s.id}')"><i class="fas fa-eye"></i> Chi tiết</button>
+                            <button class="btn btn-xs btn-outline-danger" onclick="deleteSampleDirect('${s.id}')"><i class="fas fa-trash"></i></button>
+                        </div>
+                    </div>
+                </div>
+            `;
+        });
+        $('#dataset-gallery').html(html);
+    }
+
+    function filterSamples(label, btn) {
+        $('.btn-filter').removeClass('active');
+        $(btn).addClass('active');
+        if (label === 'all') {
+            renderSamples(allSamples);
+        } else {
+            let filtered = allSamples.filter(s => s.user_label === label);
+            renderSamples(filtered);
+        }
+    }
+
+    function openSampleDetail(id) {
+        let s = allSamples.find(x => x.id === id);
+        if (!s) return;
+        currentSampleId = id;
+
+        $('#detail-sample-img').attr('src', '/static/uploads/dataset/' + s.image_filename);
+        $('#detail-sample-label').text(s.user_label);
+        $('#detail-sample-time').text(s.timestamp);
+        $('#detail-sample-cam').text(s.camera_id);
+        $('#detail-sample-conf').text((s.confidence * 100).toFixed(1) + '%');
+        $('#detail-sample-note').text(s.note || 'Không có');
+        $('#detail-sample-json').text(JSON.stringify(s, null, 2));
+
+        $('#modalSampleDetail').modal('show');
+    }
+
+    function deleteSampleDirect(id) {
+        if (!confirm('Bạn có chắc muốn xóa mẫu Dataset này?')) return;
+        $.ajax({
+            url: '/api/dataset/samples/' + id,
+            method: 'DELETE',
+            success: function() {
+                toastr.success('Đã xóa mẫu!');
+                loadSamples();
+            }
+        });
+    }
+
+    function confirmDeleteSample() {
+        if (currentSampleId) {
+            deleteSampleDirect(currentSampleId);
+            $('#modalSampleDetail').modal('hide');
+        }
+    }
+
+    function downloadZip() {
+        window.location.href = '/api/dataset/download_zip';
+    }
+
+    $(document).ready(function() {
+        loadSamples();
+    });
+</script>
+{% endblock %}

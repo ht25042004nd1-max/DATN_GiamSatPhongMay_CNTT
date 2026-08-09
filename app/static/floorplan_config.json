@@ -1,0 +1,30 @@
+{
+  "room": {
+    "name": "Phòng Thực Hành CNTT",
+    "rows": 5,
+    "cols": 8
+  },
+  "zones": [
+    { "id": "A", "label": "Dãy A", "row": 0 },
+    { "id": "B", "label": "Dãy B", "row": 1 },
+    { "id": "C", "label": "Dãy C", "row": 2 },
+    { "id": "D", "label": "Dãy D", "row": 3 },
+    { "id": "E", "label": "Dãy E", "row": 4 }
+  ],
+  "cameras": [
+    { "id": "cam-1", "label": "Camera 1", "x_pct": 5, "y_pct": 5 },
+    { "id": "cam-2", "label": "Camera 2", "x_pct": 95, "y_pct": 5 }
+  ],
+  "iot_devices": [
+    { "id": "esp32-main", "label": "ESP32 Main", "x_pct": 50, "y_pct": 3, "devices": ["led", "buzzer", "relay"] }
+  ],
+  "teacher_desk": { "label": "Bàn Giáo Viên", "x_pct": 50, "y_pct": 88 },
+  "roi_zone_map": {
+    "Toàn phòng": ["A", "B", "C", "D", "E"],
+    "Khu vực A": ["A"],
+    "Khu vực B": ["B"],
+    "Khu vực C": ["C"],
+    "Khu vực D": ["D"],
+    "Khu vực E": ["E"]
+  }
+}

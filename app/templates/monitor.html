@@ -1,0 +1,282 @@
+{% extends "base.html" %}
+{% block title %}Giám sát trực tiếp — VIU Lab Monitor{% endblock %}
+{% block header_title %}Giám sát trực tiếp{% endblock %}
+{% block title_sub %}Live Monitor{% endblock %}
+
+{% block content %}
+<div class="row mb-3">
+    <div class="col-md-5">
+        <label>Chọn Phòng máy:</label>
+        <select id="room-select" class="form-control">
+            <option value="">-- Chọn phòng --</option>
+            {% for room in rooms %}
+            <option value="{{ room.id }}">{{ room.name }}</option>
+            {% endfor %}
+        </select>
+    </div>
+    <div class="col-md-4">
+        <label>Chọn Camera:</label>
+        <select id="camera-select" class="form-control" disabled>
+            <option value="all">Tất cả Camera</option>
+        </select>
+    </div>
+    <div class="col-md-3 d-flex align-items-end justify-content-end">
+        <button class="btn btn-outline-danger btn-sm mr-2" id="btn-toggle-sound" onclick="toggleAudioAlarm()">
+            <i class="fas fa-volume-up mr-1"></i> <span id="sound-btn-text">Âm báo: BẬT</span>
+        </button>
+        <button class="btn btn-primary btn-sm" id="btn-snap-dataset" onclick="captureDatasetFrame()">
+            <i class="fas fa-camera mr-1"></i> Chụp Dataset
+        </button>
+    </div>
+</div>
+
+<div class="row">
+    <!-- Cột trái: Live Video Stream -->
+    <div class="col-md-9">
+        <div class="card card-outline card-navy">
+            <div class="card-header d-flex p-0 align-items-center">
+                <h3 class="card-title p-3 font-weight-bold mb-0">
+                    <i class="fas fa-video text-navy mr-1"></i> Live Stream Camera
+                </h3>
+                <div class="ml-3 btn-group btn-group-sm" role="group">
+                    <button type="button" class="btn btn-outline-secondary btn-layout active" onclick="changeGridLayout(1, this)" title="Lưới 1x1"><i class="fas fa-square"></i> 1x1</button>
+                    <button type="button" class="btn btn-outline-secondary btn-layout" onclick="changeGridLayout(2, this)" title="Lưới 2x2"><i class="fas fa-th-large"></i> 2x2</button>
+                    <button type="button" class="btn btn-outline-secondary btn-layout" onclick="changeGridLayout(3, this)" title="Lưới 3x3"><i class="fas fa-th"></i> 3x3</button>
+                </div>
+                <div class="ml-auto p-2" id="alarm-banner" style="display:none;">
+                    <span class="badge badge-danger p-2 animate__animated animate__flash animate__infinite">
+                        🚨 NGUY HIỂM: PHÁT HIỆN VI PHẠM
+                    </span>
+                </div>
+            </div>
+            
+            <!-- Video Container Grid -->
+            <div class="card-body p-2 bg-dark" id="video-grid-container" style="min-height: 550px;">
+                <div class="text-center text-muted" style="margin-top: 250px;">Vui lòng chọn phòng máy và camera.</div>
+            </div>
+            
+        </div>
+    </div>
+
+    <!-- Cột phải: Control & AI Details -->
+    <div class="col-md-3">
+        <!-- Cảnh báo nhanh -->
+        <div class="card card-outline card-danger">
+            <div class="card-header">
+                <h3 class="card-title font-weight-bold">
+                    <i class="fas fa-bell text-danger mr-1"></i> Cảnh báo gần đây
+                </h3>
+            </div>
+            <div class="card-body p-2" id="recent-alerts-list">
+                <div class="text-center text-muted text-sm p-3">
+                    <i class="fas fa-check-circle text-success fa-2x mb-2"></i><br>
+                    Không có cảnh báo mới
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    let currentPollingInterval = null;
+    let gridCols = 2; // Default 2x2 grid when multiple cameras
+
+    function changeGridLayout(cols, btn) {
+        gridCols = cols;
+        $('.btn-layout').removeClass('active');
+        $(btn).addClass('active');
+        if (window.activeCamerasList) {
+            renderVideoGrid(window.activeCamerasList);
+        }
+    }
+
+    function renderVideoGrid(cameras) {
+        window.activeCamerasList = cameras;
+        let colClass = '12';
+        let maxHeight = '550px';
+
+        if (cameras.length > 1) {
+            if (gridCols === 1) { colClass = '12'; maxHeight = '550px'; }
+            else if (gridCols === 2) { colClass = '6'; maxHeight = '300px'; }
+            else if (gridCols === 3) { colClass = '4'; maxHeight = '220px'; }
+        }
+
+        let html = '<div class="row">';
+        cameras.forEach(cam => {
+            html += `
+                <div class="col-md-${colClass} mb-3">
+                    <div class="card bg-black text-white m-0">
+                        <div class="card-header p-1 bg-secondary text-center text-sm">
+                            <i class="fas fa-camera"></i> ${cam.name}
+                            <span class="badge badge-success float-right" id="status-${cam.id}">ONLINE</span>
+                        </div>
+                        <img id="video-${cam.id}" src="/video_feed/${cam.id}" class="img-fluid w-100" style="object-fit: contain; max-height: ${maxHeight};" onerror="this.onerror=null; this.src='/static/images/placeholder.png';">
+                        <div class="card-footer p-1 text-xs text-muted text-center" id="info-${cam.id}">
+                            FPS: -- | AI: Đang tải...
+                        </div>
+                    </div>
+                </div>
+            `;
+        });
+        html += '</div>';
+        $('#video-grid-container').html(html);
+
+        if(currentPollingInterval) clearInterval(currentPollingInterval);
+        
+        currentPollingInterval = setInterval(() => {
+            cameras.forEach(cam => {
+                $.ajax({
+                    url: '/camera_status/' + cam.id,
+                    success: function(d) {
+                        $('#status-' + cam.id).text(d.is_online ? 'ONLINE' : 'OFFLINE')
+                                              .attr('class', 'badge float-right ' + (d.is_online ? 'badge-success' : 'badge-danger'));
+                        let ai_status = d.pose && d.pose.is_detected ? `CÓ NGƯỜI (${d.pose.pose})` : 'KHÔNG CÓ NGƯỜI';
+                        $('#info-' + cam.id).text(`FPS: ${d.fps.toFixed(1)} | AI: ${ai_status}`);
+                    }
+                });
+            });
+            loadRecentAlerts();
+        }, 2000);
+    }
+
+    // ── Web Audio Alarm (Audio Siren Synthesizer) ─────────────
+    let audioEnabled = localStorage.getItem('monitor_audio_alarm') !== 'false';
+    let audioCtx = null;
+
+    function updateAudioBtnUI() {
+        if (audioEnabled) {
+            $('#btn-toggle-sound').removeClass('btn-outline-secondary').addClass('btn-outline-danger');
+            $('#sound-btn-text').text('Âm báo: BẬT');
+        } else {
+            $('#btn-toggle-sound').removeClass('btn-outline-danger').addClass('btn-outline-secondary');
+            $('#sound-btn-text').text('Âm báo: TẮT');
+        }
+    }
+
+    function toggleAudioAlarm() {
+        audioEnabled = !audioEnabled;
+        localStorage.setItem('monitor_audio_alarm', audioEnabled);
+        updateAudioBtnUI();
+        if (audioEnabled) playSirenSound();
+    }
+
+    function playSirenSound() {
+        if (!audioEnabled) return;
+        try {
+            if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+            
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.type = 'sawtooth';
+            osc.frequency.setValueAtTime(800, audioCtx.currentTime);
+            osc.frequency.exponentialRampToValueAtTime(400, audioCtx.currentTime + 0.3);
+            gain.gain.setValueAtTime(0.2, audioCtx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.3);
+            
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.start();
+            osc.stop(audioCtx.currentTime + 0.3);
+        } catch(e) {}
+    }
+
+    // ── Công cụ Chụp Dataset ─────────────────────────────────
+    function captureDatasetFrame() {
+        const camId = $('#camera-select').val() === 'all' ? (window.currentCameras?.[0]?.id || 1) : $('#camera-select').val();
+        if (!camId) {
+            toastr.error('Vui lòng chọn camera trước!');
+            return;
+        }
+
+        $('#btn-snap-dataset').prop('disabled', true).html('<i class="fas fa-spinner fa-spin mr-1"></i> Đang chụp...');
+        $.ajax({
+            url: '/api/dataset/capture',
+            method: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify({ camera_id: parseInt(camId), note: 'Chụp thủ công từ UI Giám sát' }),
+            success: function(res) {
+                toastr.success('📸 Đã lưu mẫu Dataset thành công!');
+                $('#btn-snap-dataset').prop('disabled', false).html('<i class="fas fa-camera mr-1"></i> Chụp Dataset');
+            },
+            error: function(err) {
+                toastr.error('Lỗi khi chụp Dataset: ' + (err.responseJSON?.error || 'Lỗi server'));
+                $('#btn-snap-dataset').prop('disabled', false).html('<i class="fas fa-camera mr-1"></i> Chụp Dataset');
+            }
+        });
+    }
+
+    function loadRecentAlerts() {
+        $.ajax({
+            url: '/api/events?limit=3',
+            success: function(events) {
+                var listContainer = $('#recent-alerts-list');
+                if (events && events.length > 0) {
+                    listContainer.empty();
+                    let hasHighLevel = false;
+                    events.forEach(function(ev) {
+                        if (ev.level === 'high' && ev.status === 'pending') hasHighLevel = true;
+                        listContainer.append(
+                            '<div class="p-2 border-bottom text-sm">' +
+                            '  <strong>' + ev.roi_name + '</strong> (' + (ev.started_at ? ev.started_at.split(' ')[1] : '') + ')<br>' +
+                            '  ' + ev.pose_label + ' <span class="badge badge-' + (ev.level==='high'?'danger':'warning') + '">' + ev.level_label + '</span>' +
+                            '</div>'
+                        );
+                    });
+
+                    if (hasHighLevel) {
+                        $('#alarm-banner').show();
+                        playSirenSound();
+                    } else {
+                        $('#alarm-banner').hide();
+                    }
+                }
+            }
+        });
+    }
+
+    $(document).ready(function() {
+        updateAudioBtnUI();
+        $('#room-select').change(function() {
+            let roomId = $(this).val();
+            if(!roomId) {
+                $('#camera-select').prop('disabled', true).html('<option value="all">Tất cả Camera</option>');
+                $('#video-grid-container').html('<div class="text-center text-muted" style="margin-top: 250px;">Vui lòng chọn phòng máy.</div>');
+                if(currentPollingInterval) clearInterval(currentPollingInterval);
+                return;
+            }
+
+            $.ajax({
+                url: '/api/cameras?room_id=' + roomId,
+                success: function(cameras) {
+                    $('#camera-select').prop('disabled', false);
+                    let opts = '<option value="all">Tất cả Camera</option>';
+                    cameras.forEach(c => {
+                        opts += `<option value="${c.id}">${c.name}</option>`;
+                    });
+                    $('#camera-select').html(opts);
+                    
+                    window.currentCameras = cameras;
+                    renderVideoGrid(cameras);
+                }
+            });
+        });
+
+        $('#camera-select').change(function() {
+            let camId = $(this).val();
+            if (camId === 'all') {
+                renderVideoGrid(window.currentCameras);
+            } else {
+                let selectedCam = window.currentCameras.find(c => c.id == camId);
+                if (selectedCam) {
+                    renderVideoGrid([selectedCam]);
+                }
+            }
+        });
+        
+        loadRecentAlerts();
+    });
+</script>
+{% endblock %}

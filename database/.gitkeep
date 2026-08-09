@@ -1,0 +1,3 @@
+# Thư mục này chứa file SQLite database (lab_monitor.db).
+# File .db sẽ được bỏ qua bởi .gitignore (không commit lên Git).
+# File sẽ được tạo tự động khi chạy ứng dụng lần đầu.

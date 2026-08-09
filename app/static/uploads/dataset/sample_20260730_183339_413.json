@@ -1,0 +1,11 @@
+{
+  "timestamp": "2026-07-30T18:33:39.417042",
+  "camera_id": 1,
+  "user_label": "Khong xac dinh",
+  "ai_detected_pose": "Khong xac dinh",
+  "confidence": 0.0,
+  "is_detected": true,
+  "note": "Chụp thủ công từ UI Giám sát",
+  "image_filename": "sample_20260730_183339_413.jpg",
+  "rois": []
+}

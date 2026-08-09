@@ -1,0 +1,543 @@
+{% extends "base.html" %}
+{% block title %}Cấu hình ROI — Lab Monitor{% endblock %}
+{% block header_title %}Cấu hình ROI{% endblock %}
+{% block title_sub %}Region of Interest{% endblock %}
+
+{% block extra_css %}
+<style>
+/* ── Canvas area ── */
+.canvas-wrap {
+    position: relative;
+    width: 100%;
+    min-height: 400px;
+    height: 60vh;
+    border-radius: 4px;
+    overflow: hidden;
+    cursor: crosshair;
+    background: #2c3e50;
+}
+
+#roi-canvas {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 2;
+}
+
+#snapshot-img {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    display: block;
+    z-index: 1;
+}
+
+.canvas-hint {
+    position: absolute;
+    bottom: 12px;
+    left: 50%;
+    transform: translateX(-50%);
+    padding: 6px 16px;
+    border-radius: 20px;
+    font-size: 0.8rem;
+    color: white;
+    background: rgba(0,0,0,0.6);
+    pointer-events: none;
+    z-index: 3;
+}
+
+/* ── Danh sách ROI ── */
+.roi-list {
+    max-height: calc(60vh - 150px);
+    overflow-y: auto;
+}
+
+.roi-item-card {
+    transition: all 0.2s;
+    border-left: 4px solid transparent;
+}
+.roi-item-card:hover {
+    background-color: #f8f9fa;
+}
+.roi-inactive {
+    opacity: 0.6;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<!-- Camera & Room selector -->
+<div class="row mb-3">
+    <div class="col-md-4">
+        <label class="font-weight-bold">Chọn Camera để vẽ ROI:</label>
+        <select id="camera-select" class="form-control" onchange="onCameraChange()">
+            <option value="">-- Chọn camera --</option>
+        </select>
+    </div>
+</div>
+<div class="row">
+    <!-- ── Cột trái: Canvas vẽ ROI ── -->
+    <div class="col-lg-8 mb-4">
+        <div class="card card-primary card-outline shadow-sm h-100">
+            <div class="card-header d-flex p-0">
+                <h3 class="card-title p-3">
+                    <i class="fas fa-draw-polygon mr-1 text-primary"></i> Vẽ vùng giám sát
+                </h3>
+                <div class="ml-auto p-2 d-flex align-items-center">
+                    <button class="btn btn-sm btn-outline-primary mr-2" onclick="refreshSnapshot()">
+                        <i class="fas fa-sync-alt"></i> Làm mới ảnh
+                    </button>
+                    <button class="btn btn-sm btn-outline-danger mr-2" onclick="clearPoints()" id="btn-clear">
+                        <i class="fas fa-trash"></i> Xóa điểm
+                    </button>
+                    <button class="btn btn-sm btn-outline-secondary" onclick="undoPoint()" id="btn-undo">
+                        <i class="fas fa-undo"></i> Hoàn tác
+                    </button>
+                </div>
+            </div>
+            
+            <div class="card-body p-2 bg-light">
+                <div class="canvas-wrap border shadow-sm" id="canvas-wrap">
+                    <img id="snapshot-img" src="" alt="Camera snapshot"
+                         onload="onSnapLoaded()" onerror="this.src=''">
+                    <canvas id="roi-canvas"></canvas>
+                    <div class="canvas-hint shadow-sm" id="canvas-hint">
+                        <i class="fas fa-mouse-pointer mr-1"></i> Click để thêm điểm · Double-click để hoàn thành
+                    </div>
+                </div>
+                <div class="text-right mt-2 text-muted small font-weight-bold" id="point-count">Chưa có điểm</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── Cột phải: Form + Danh sách ── -->
+    <div class="col-lg-4">
+        <!-- Form tạo/sửa ROI -->
+        <div class="card card-success card-outline shadow-sm mb-4">
+            <div class="card-header">
+                <h3 class="card-title font-weight-bold text-success" id="form-title">
+                    <i class="fas fa-plus-circle mr-1"></i> Tạo ROI mới
+                </h3>
+            </div>
+            <div class="card-body">
+                <div class="form-group">
+                    <label>Tên khu vực (ROI)</label>
+                    <input type="text" id="inp-name" class="form-control" placeholder="VD: Khu vực máy tính A1">
+                </div>
+                <div class="row">
+                    <div class="col-7">
+                        <div class="form-group">
+                            <label>Mức độ</label>
+                            <select id="inp-level" class="form-control custom-select">
+                                <option value="low">🟡 Thấp</option>
+                                <option value="medium" selected>🟠 Trung bình</option>
+                                <option value="high">🔴 Cao</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="col-5">
+                        <div class="form-group">
+                            <label>Ngưỡng (s)</label>
+                            <input type="number" id="inp-threshold" class="form-control" value="5" min="1" max="60">
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="d-flex align-items-center mt-3">
+                    <button class="btn btn-success flex-grow-1 font-weight-bold" onclick="saveROI()" id="btn-save" disabled>
+                        <i class="fas fa-save mr-1"></i> Lưu ROI
+                    </button>
+                    <button class="btn btn-secondary ml-2" onclick="resetForm()" id="btn-cancel-edit" style="display:none;" title="Hủy sửa">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                <div class="text-center mt-2 small font-weight-bold" id="save-status"></div>
+            </div>
+        </div>
+
+        <!-- Danh sách ROI -->
+        <div class="card card-info card-outline shadow-sm">
+            <div class="card-header">
+                <h3 class="card-title">
+                    <i class="fas fa-list mr-1"></i> Danh sách ROI (<span id="roi-total">0</span>)
+                </h3>
+            </div>
+            <div class="card-body p-0">
+                <div class="roi-list p-2" id="roi-list">
+                    <div class="text-center p-4 text-muted">
+                        <i class="fas fa-spinner fa-spin mr-1"></i> Đang tải...
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const LEVEL_COLORS = { low:'#ffc107', medium:'#fd7e14', high:'#dc3545' };
+const LEVEL_LABELS = { low:'Thấp', medium:'Trung bình', high:'Cao' };
+const LEVEL_BADGES = { low:'badge-warning', medium:'badge-orange', high:'badge-danger' };
+
+let points = [];      // Điểm đang vẽ [[x_norm, y_norm],...]
+let rois   = [];      // Cache danh sách ROI từ API
+let editingId = null; // null = tạo mới, số = đang sửa
+
+const canvas   = document.getElementById('roi-canvas');
+const ctx      = canvas.getContext('2d');
+const snapImg  = document.getElementById('snapshot-img');
+const wrap     = document.getElementById('canvas-wrap');
+
+// Custom badge orange class that adminlte might not have by default
+$("<style type='text/css'> .badge-orange{ background-color:#fd7e14; color:#fff; } </style>").appendTo("head");
+
+// ── Snapshot ───────────────────────────────────────────
+let _activeCameraId = null;
+
+function getCurrentCameraId() {
+    return $('#camera-select').val() || _activeCameraId || null;
+}
+
+function refreshSnapshot() {
+    const camId = getCurrentCameraId();
+    if (!camId) {
+        alert('Vui lòng chọn camera trước!');
+        return;
+    }
+    snapImg.src = '/api/camera_snapshot?camera_id=' + camId + '&t=' + Date.now();
+}
+
+function onCameraChange() {
+    const camId = getCurrentCameraId();
+    if (camId) {
+        snapImg.src = '/api/camera_snapshot?camera_id=' + camId + '&t=' + Date.now();
+        loadROIs(camId);
+    }
+}
+
+// Load danh sách cameras
+$.ajax({
+    url: '/api/cameras',
+    success: function(cameras) {
+        const sel = $('#camera-select');
+        cameras.forEach(c => {
+            sel.append(`<option value="${c.id}">${c.name} (${c.room_name || 'N/A'})</option>`);
+        });
+        if (cameras.length > 0) {
+            _activeCameraId = cameras[0].id;
+            sel.val(cameras[0].id);
+            snapImg.src = '/api/camera_snapshot?camera_id=' + cameras[0].id + '&t=' + Date.now();
+            loadROIs(cameras[0].id);
+        }
+    }
+});
+
+
+function onSnapLoaded() {
+    resizeCanvas();
+    redraw();
+}
+
+function resizeCanvas() {
+    const r = wrap.getBoundingClientRect();
+    canvas.width  = r.width;
+    canvas.height = r.height;
+}
+
+window.addEventListener('resize', () => { resizeCanvas(); redraw(); });
+
+// ── Canvas events ─────────────────────────────────────────
+canvas.addEventListener('click', e => {
+    const r  = canvas.getBoundingClientRect();
+    const xn = (e.clientX - r.left)  / r.width;
+    const yn = (e.clientY - r.top)   / r.height;
+    points.push([xn, yn]);
+    updateUI();
+    redraw();
+});
+
+canvas.addEventListener('dblclick', e => {
+    if (points.length >= 4) {
+        points.pop(); // bỏ điểm thừa từ click thứ 2 của dblclick
+        redraw();
+        updateUI();
+    }
+});
+
+// Mousemove: vẽ đường kẻ theo chuột
+canvas.addEventListener('mousemove', e => {
+    if (points.length === 0) return;
+    const r = canvas.getBoundingClientRect();
+    const mx = e.clientX - r.left;
+    const my = e.clientY - r.top;
+    redraw(mx, my);
+});
+
+canvas.addEventListener('mouseleave', () => redraw());
+
+// ── Vẽ polygon ────────────────────────────────────────────
+function redraw(mx, my) {
+    const W = canvas.width, H = canvas.height;
+    ctx.clearRect(0, 0, W, H);
+
+    // Vẽ tất cả ROI đã lưu
+    rois.forEach(roi => drawSavedROI(roi, W, H));
+
+    if (points.length === 0) return;
+
+    // Chuyển điểm chuẩn hóa → pixel
+    const pts = points.map(([xn,yn]) => [xn*W, yn*H]);
+
+    // Fill bán trong suốt
+    ctx.beginPath();
+    ctx.moveTo(pts[0][0], pts[0][1]);
+    pts.slice(1).forEach(([x,y]) => ctx.lineTo(x, y));
+    if (mx !== undefined) ctx.lineTo(mx, my);  // đường theo chuột
+    ctx.closePath();
+    ctx.fillStyle   = 'rgba(0,123,255,0.15)';
+    ctx.fill();
+
+    // Viền
+    ctx.beginPath();
+    ctx.moveTo(pts[0][0], pts[0][1]);
+    pts.slice(1).forEach(([x,y]) => ctx.lineTo(x, y));
+    if (mx !== undefined) ctx.lineTo(mx, my);
+    ctx.strokeStyle = '#007bff';
+    ctx.lineWidth   = 2;
+    ctx.setLineDash([6,3]);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Điểm tròn + số thứ tự
+    pts.forEach(([x,y], i) => {
+        ctx.beginPath();
+        ctx.arc(x, y, 5, 0, Math.PI*2);
+        ctx.fillStyle   = i === 0 ? '#28a745' : '#007bff';
+        ctx.fill();
+        ctx.strokeStyle = 'white';
+        ctx.lineWidth   = 1;
+        ctx.stroke();
+
+        ctx.fillStyle = 'white';
+        ctx.font = 'bold 12px Arial';
+        ctx.shadowColor = 'black';
+        ctx.shadowBlur = 3;
+        ctx.fillText(i+1, x+8, y-4);
+        ctx.shadowBlur = 0;
+    });
+}
+
+function drawSavedROI(roi, W, H) {
+    if (!roi.points || roi.points.length < 3) return;
+    const color = LEVEL_COLORS[roi.level] || '#6c757d';
+    const isEditing = (roi.id === editingId);
+
+    const pts = roi.points.map(([xn,yn]) => [xn*W, yn*H]);
+
+    ctx.beginPath();
+    ctx.moveTo(pts[0][0], pts[0][1]);
+    pts.slice(1).forEach(([x,y]) => ctx.lineTo(x, y));
+    ctx.closePath();
+
+    ctx.fillStyle = roi.is_active ? color + '33' : '#6c757d33';
+    ctx.fill();
+
+    ctx.strokeStyle = roi.is_active ? color : '#6c757d';
+    ctx.lineWidth = isEditing ? 3 : 2;
+    if (isEditing) ctx.setLineDash([8,4]);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    if (!isEditing) {
+        // Label ở điểm đầu tiên
+        const [lx, ly] = pts[0];
+        ctx.fillStyle = roi.is_active ? color : '#6c757d';
+        ctx.fillRect(lx, ly - 20, ctx.measureText(roi.name).width + 12, 18);
+        ctx.fillStyle = 'white';
+        ctx.font = 'bold 11px Arial';
+        ctx.fillText(roi.name, lx + 6, ly - 7);
+    }
+}
+
+// ── Các hàm xử lý điểm ─────────────────────────────────────
+function undoPoint() {
+    points.pop();
+    updateUI();
+    redraw();
+}
+function clearPoints() {
+    points = [];
+    updateUI();
+    redraw();
+}
+function updateUI() {
+    const pc = points.length;
+    document.getElementById('point-count').textContent = pc > 0 ? `Đã chọn: ${pc} điểm` : 'Chưa có điểm';
+    document.getElementById('btn-save').disabled = pc < 3 && !editingId;
+}
+
+// ── CRUD qua API ───────────────────────────────────────────
+async function loadROIs(camId) {
+    try {
+        const cid = camId || getCurrentCameraId();
+        const url = cid ? `/api/rois?camera_id=${cid}` : '/api/rois';
+        const r = await fetch(url);
+        rois = await r.json();
+        document.getElementById('roi-total').textContent = rois.length;
+        renderROIList();
+        redraw();
+    } catch(e) {
+        document.getElementById('roi-list').innerHTML = `<div class="text-center p-3 text-danger"><i class="fas fa-exclamation-triangle"></i> Lỗi kết nối</div>`;
+    }
+}
+
+function renderROIList() {
+    const list = document.getElementById('roi-list');
+    if (rois.length === 0) {
+        list.innerHTML = `<div class="text-center p-4 text-muted"><i class="fas fa-info-circle mb-2" style="font-size:24px;"></i><br>Chưa cấu hình khu vực nào</div>`;
+        return;
+    }
+
+    list.innerHTML = rois.map(roi => `
+        <div class="card mb-2 roi-item-card shadow-sm ${roi.is_active ? '' : 'roi-inactive'}" style="border-left-color: ${roi.is_active ? LEVEL_COLORS[roi.level] : '#6c757d'}">
+            <div class="card-body p-2">
+                <div class="d-flex justify-content-between align-items-center mb-1">
+                    <strong class="text-truncate" style="max-width: 150px;" title="${roi.name}">${roi.name}</strong>
+                    <div class="custom-control custom-switch custom-switch-sm">
+                        <input type="checkbox" class="custom-control-input" id="toggle-${roi.id}" 
+                               ${roi.is_active ? 'checked' : ''} onchange="toggleROI(${roi.id})">
+                        <label class="custom-control-label" for="toggle-${roi.id}"></label>
+                    </div>
+                </div>
+                <div class="mb-2">
+                    <span class="badge ${LEVEL_BADGES[roi.level]} mr-1">${LEVEL_LABELS[roi.level]}</span>
+                    <span class="badge badge-light border"><i class="fas fa-stopwatch text-muted mr-1"></i>${roi.threshold_time}s</span>
+                    <span class="badge badge-light border"><i class="fas fa-draw-polygon text-muted mr-1"></i>${roi.points.length} điểm</span>
+                </div>
+                <div class="d-flex justify-content-end">
+                    <button class="btn btn-xs btn-outline-primary mr-1" onclick="editROI(${roi.id})"><i class="fas fa-edit"></i> Sửa</button>
+                    <button class="btn btn-xs btn-outline-danger" onclick="deleteROI(${roi.id})"><i class="fas fa-trash"></i> Xóa</button>
+                </div>
+            </div>
+        </div>
+    `).join('');
+}
+
+async function saveROI() {
+    const name = document.getElementById('inp-name').value.trim();
+    if (!name) return alert("Vui lòng nhập tên ROI");
+    if (points.length < 3 && !editingId) return alert("Cần vẽ ít nhất 3 điểm!");
+
+    const payload = {
+        name: name,
+        level: document.getElementById('inp-level').value,
+        duration_threshold: parseInt(document.getElementById('inp-threshold').value),
+        camera_id: getCurrentCameraId() ? parseInt(getCurrentCameraId()) : null
+    };
+    if (points.length >= 3) payload.points = points; // Chỉ update điểm nếu có vẽ mới
+
+    const btn = document.getElementById('btn-save');
+    const oldHtml = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-1"></i> Đang lưu...';
+
+    let url = '/api/rois';
+    let method = 'POST';
+    if (editingId) {
+        url = `/api/rois/${editingId}`;
+        method = 'PUT';
+    }
+
+    try {
+        const r = await fetch(url, {
+            method: method,
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(payload)
+        });
+        if (r.ok) {
+            showStatus('✅ Đã lưu thành công', 'success');
+            resetForm();
+            loadROIs();
+        } else {
+            showStatus('❌ Lỗi khi lưu', 'danger');
+        }
+    } catch(e) {
+        showStatus('❌ Lỗi kết nối', 'danger');
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = oldHtml;
+    }
+}
+
+async function deleteROI(id) {
+    if(!confirm("Bạn có chắc chắn muốn xóa khu vực này?")) return;
+    try {
+        await fetch(`/api/rois/${id}`, {method:'DELETE'});
+        if (editingId === id) resetForm();
+        loadROIs();
+    } catch(e) {}
+}
+
+async function toggleROI(id) {
+    try {
+        await fetch(`/api/rois/${id}/toggle`, {method:'PUT'});
+        loadROIs();
+    } catch(e) {}
+}
+
+function editROI(id) {
+    const roi = rois.find(r => r.id === id);
+    if(!roi) return;
+    editingId = id;
+    
+    document.getElementById('form-title').innerHTML = '<i class="fas fa-edit mr-1"></i> Đang sửa ROI #' + id;
+    document.getElementById('form-title').className = 'card-title font-weight-bold text-primary';
+    document.getElementById('btn-save').innerHTML = '<i class="fas fa-save mr-1"></i> Cập nhật';
+    document.getElementById('btn-save').className = 'btn btn-primary flex-grow-1 font-weight-bold';
+    document.getElementById('btn-save').disabled = false;
+    document.getElementById('btn-cancel-edit').style.display = 'block';
+
+    document.getElementById('inp-name').value = roi.name;
+    document.getElementById('inp-level').value = roi.level;
+    document.getElementById('inp-threshold').value = roi.threshold_time;
+    
+    clearPoints(); // Xóa điểm đang vẽ dở để chuẩn bị nhận điểm mới (nếu người dùng muốn vẽ lại)
+    redraw();
+}
+
+function resetForm() {
+    editingId = null;
+    document.getElementById('form-title').innerHTML = '<i class="fas fa-plus-circle mr-1"></i> Tạo ROI mới';
+    document.getElementById('form-title').className = 'card-title font-weight-bold text-success';
+    document.getElementById('btn-save').innerHTML = '<i class="fas fa-save mr-1"></i> Lưu ROI';
+    document.getElementById('btn-save').className = 'btn btn-success flex-grow-1 font-weight-bold';
+    document.getElementById('btn-cancel-edit').style.display = 'none';
+
+    document.getElementById('inp-name').value = '';
+    document.getElementById('inp-level').value = 'medium';
+    document.getElementById('inp-threshold').value = 5;
+    clearPoints();
+}
+
+function showStatus(msg, type) {
+    const el = document.getElementById('save-status');
+    el.textContent = msg;
+    el.className = `text-center mt-2 small font-weight-bold text-${type}`;
+    setTimeout(() => el.textContent = '', 3000);
+}
+
+// Khởi chạy
+loadROIs();
+
+// Auto refresh camera định kỳ (5s) nếu không đang vẽ
+setInterval(() => {
+    if (points.length === 0 && document.visibilityState === 'visible') {
+        refreshSnapshot();
+    }
+}, 5000);
+</script>
+{% endblock %}

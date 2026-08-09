@@ -1,0 +1,202 @@
+{% extends "base.html" %}
+{% block title %}Quản lý Camera — Lab Monitor{% endblock %}
+{% block header_title %}Quản lý Camera{% endblock %}
+{% block title_sub %}Camera Management{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title"><i class="fas fa-video mr-2 text-primary"></i>Danh sách Camera</h3>
+                <div class="card-tools">
+                    <button class="btn btn-primary btn-sm" data-toggle="modal" data-target="#modalAddCamera">
+                        <i class="fas fa-plus"></i> Thêm Camera
+                    </button>
+                </div>
+            </div>
+            <div class="card-body table-responsive p-0">
+                <table class="table table-hover table-striped text-nowrap">
+                    <thead class="thead-dark">
+                        <tr>
+                            <th>ID</th>
+                            <th>Tên Camera</th>
+                            <th>Phòng máy</th>
+                            <th>RTSP / Nguồn</th>
+                            <th>Trạng thái</th>
+                            <th>Hành động</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for cam in cameras %}
+                        <tr id="row-cam-{{ cam.id }}">
+                            <td>{{ cam.id }}</td>
+                            <td><strong>{{ cam.name }}</strong></td>
+                            <td>{{ cam.room.name if cam.room else '-' }}</td>
+                            <td><code>{{ cam.rtsp_url or '-' }}</code></td>
+                            <td>
+                                {% if cam.is_active %}
+                                <span class="badge badge-success">Hoạt động</span>
+                                {% else %}
+                                <span class="badge badge-secondary">Tắt</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <button class="btn btn-sm btn-info" title="Sửa"
+                                    onclick="openEditCam({{ cam.id }}, '{{ cam.name }}', {{ cam.room_id }}, '{{ cam.rtsp_url or '' }}', {{ cam.is_active | tojson }})">
+                                    <i class="fas fa-edit"></i>
+                                </button>
+                                <button class="btn btn-sm btn-danger" title="Xóa" onclick="deleteCam({{ cam.id }}, '{{ cam.name }}')">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="6" class="text-center text-muted py-4"><i class="fas fa-video-slash fa-2x mb-2"></i><br>Chưa có camera nào.</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Thêm Camera -->
+<div class="modal fade" id="modalAddCamera" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title"><i class="fas fa-plus mr-2"></i>Thêm Camera mới</h5>
+                <button type="button" class="close text-white" data-dismiss="modal"><span>&times;</span></button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>Tên Camera <span class="text-danger">*</span></label>
+                    <input type="text" id="add-cam-name" class="form-control" placeholder="VD: Camera Cổng vào">
+                </div>
+                <div class="form-group">
+                    <label>Phòng máy <span class="text-danger">*</span></label>
+                    <select id="add-cam-room" class="form-control">
+                        <option value="">-- Chọn phòng --</option>
+                        {% for r in rooms %}
+                        <option value="{{ r.id }}">{{ r.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Nguồn video (RTSP / Index webcam)</label>
+                    <input type="text" id="add-cam-rtsp" class="form-control" placeholder="0 (webcam), hoặc rtsp://...">
+                    <small class="form-text text-muted">Nhập số (0, 1...) cho webcam USB, hoặc URL RTSP đầy đủ cho IP Camera.</small>
+                </div>
+                <div class="form-check">
+                    <input type="checkbox" class="form-check-input" id="add-cam-active" checked>
+                    <label class="form-check-label" for="add-cam-active">Kích hoạt</label>
+                </div>
+                <div class="alert alert-danger d-none mt-2" id="add-cam-error"></div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" data-dismiss="modal">Hủy</button>
+                <button class="btn btn-primary" id="btn-add-cam" onclick="submitAddCam()">
+                    <i class="fas fa-save mr-1"></i>Lưu
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Sửa Camera -->
+<div class="modal fade" id="modalEditCamera" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-info text-white">
+                <h5 class="modal-title"><i class="fas fa-edit mr-2"></i>Sửa thông tin Camera</h5>
+                <button type="button" class="close text-white" data-dismiss="modal"><span>&times;</span></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="edit-cam-id">
+                <div class="form-group">
+                    <label>Tên Camera <span class="text-danger">*</span></label>
+                    <input type="text" id="edit-cam-name" class="form-control">
+                </div>
+                <div class="form-group">
+                    <label>Phòng máy <span class="text-danger">*</span></label>
+                    <select id="edit-cam-room" class="form-control">
+                        {% for r in rooms %}
+                        <option value="{{ r.id }}">{{ r.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Nguồn video (RTSP / Index)</label>
+                    <input type="text" id="edit-cam-rtsp" class="form-control">
+                </div>
+                <div class="form-check">
+                    <input type="checkbox" class="form-check-input" id="edit-cam-active">
+                    <label class="form-check-label" for="edit-cam-active">Kích hoạt</label>
+                </div>
+                <div class="alert alert-danger d-none mt-2" id="edit-cam-error"></div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" data-dismiss="modal">Hủy</button>
+                <button class="btn btn-info" onclick="submitEditCam()"><i class="fas fa-save mr-1"></i>Cập nhật</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function submitAddCam() {
+    const name = $('#add-cam-name').val().trim();
+    const room_id = $('#add-cam-room').val();
+    if (!name || !room_id) { showError('add-cam-error', 'Vui lòng điền đầy đủ tên và phòng'); return; }
+    $('#btn-add-cam').prop('disabled', true).html('<i class="fas fa-spinner fa-spin mr-1"></i>Đang lưu...');
+    $.ajax({
+        url: '/api/cameras', method: 'POST', contentType: 'application/json',
+        data: JSON.stringify({ name: name, room_id: parseInt(room_id), rtsp_url: $('#add-cam-rtsp').val().trim() || null, is_active: $('#add-cam-active').is(':checked') }),
+        success: () => location.reload(),
+        error: (xhr) => { showError('add-cam-error', xhr.responseJSON?.error || 'Lỗi'); $('#btn-add-cam').prop('disabled', false).html('<i class="fas fa-save mr-1"></i>Lưu'); }
+    });
+}
+
+function openEditCam(id, name, room_id, rtsp, is_active) {
+    $('#edit-cam-id').val(id); $('#edit-cam-name').val(name);
+    $('#edit-cam-room').val(room_id); $('#edit-cam-rtsp').val(rtsp);
+    $('#edit-cam-active').prop('checked', is_active);
+    $('#edit-cam-error').addClass('d-none');
+    $('#modalEditCamera').modal('show');
+}
+
+function submitEditCam() {
+    const id = $('#edit-cam-id').val();
+    const name = $('#edit-cam-name').val().trim();
+    if (!name) { showError('edit-cam-error', 'Tên không được để trống'); return; }
+    $.ajax({
+        url: '/api/cameras/' + id, method: 'PUT', contentType: 'application/json',
+        data: JSON.stringify({ name: name, room_id: parseInt($('#edit-cam-room').val()), rtsp_url: $('#edit-cam-rtsp').val().trim() || null, is_active: $('#edit-cam-active').is(':checked') }),
+        success: () => location.reload(),
+        error: (xhr) => showError('edit-cam-error', xhr.responseJSON?.error || 'Lỗi')
+    });
+}
+
+function deleteCam(id, name) {
+    if (!confirm(`Xóa camera "${name}"? Dữ liệu ROI và sự kiện liên quan cũng sẽ bị xóa.`)) return;
+    $.ajax({
+        url: '/api/cameras/' + id, method: 'DELETE',
+        success: () => { $('#row-cam-' + id).remove(); toastr.success('Đã xóa camera ' + name); },
+        error: (xhr) => toastr.error(xhr.responseJSON?.message || 'Lỗi')
+    });
+}
+
+function showError(elemId, msg) { $('#' + elemId).text(msg).removeClass('d-none'); }
+
+$('#modalAddCamera').on('hidden.bs.modal', function() {
+    $('#add-cam-name, #add-cam-rtsp').val(''); $('#add-cam-room').val('');
+    $('#add-cam-active').prop('checked', true); $('#add-cam-error').addClass('d-none');
+    $('#btn-add-cam').prop('disabled', false).html('<i class="fas fa-save mr-1"></i>Lưu');
+});
+</script>
+{% endblock %}

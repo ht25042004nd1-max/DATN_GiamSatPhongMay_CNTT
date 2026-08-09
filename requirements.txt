@@ -1,0 +1,28 @@
+# ============================================================
+# requirements.txt — Danh sách thư viện cho toàn bộ dự án
+# Hệ thống Giám Sát An Toàn Phòng Thực Hành Máy Tính
+# ============================================================
+
+# --- Web Framework ---
+Flask==3.1.1                  # Backend chính
+Flask-SQLAlchemy==3.1.1       # ORM để thao tác SQLite dễ hơn
+Flask-Login==0.6.3            # Quản lý phiên đăng nhập
+
+# --- Database ---
+# SQLite đã có sẵn trong Python, không cần cài thêm
+
+# --- Computer Vision & AI ---
+opencv-python==4.11.0.86      # Xử lý hình ảnh/video từ camera
+mediapipe==0.10.35            # Nhận diện tư thế cơ thể (Pose Detection)
+
+# --- Telegram Bot (gửi cảnh báo) ---
+requests==2.32.3              # Gọi HTTP API (Telegram Bot API, IoT mock)
+
+# --- Xuất báo cáo PDF ---
+reportlab==4.4.1              # Tạo file PDF báo cáo
+
+# --- Tiện ích & Giám sát Hệ thống ---
+python-dotenv==1.1.1          # Đọc biến môi trường từ file .env
+Pillow==11.2.1                # Xử lý ảnh (hỗ trợ cho OpenCV & ReportLab)
+psutil==7.2.2                 # Giám sát hiệu năng hệ thống (CPU, RAM, Disk)
+

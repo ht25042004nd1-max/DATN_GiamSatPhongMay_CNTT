@@ -1,0 +1,56 @@
+# ============================================================
+# .gitignore — Danh sách file/thư mục không đưa lên Git
+# Phù hợp cho dự án Python + Flask + SQLite
+# ============================================================
+
+# === Python ===
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# === Virtual Environment ===
+venv/
+.venv/
+env/
+ENV/
+
+# === Biến môi trường (chứa thông tin nhạy cảm: token, secret key...) ===
+.env
+
+# === Database SQLite (file data thực tế, không commit lên git) ===
+*.db
+*.sqlite
+*.sqlite3
+database/*.db
+
+# === IDE & Editor ===
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# === Log files ===
+*.log
+logs/
+
+# === Ảnh/Video tạm sinh ra khi chạy hệ thống ===
+static/captures/
+static/snapshots/
+
+# === ReportLab / PDF output ===
+reports/*.pdf
+
+# === Pytest / Coverage ===
+.pytest_cache/
+htmlcov/
+.coverage
+coverage.xml

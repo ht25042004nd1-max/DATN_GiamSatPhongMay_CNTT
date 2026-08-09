@@ -1,0 +1,477 @@
+{% extends "base.html" %}
+{% block title %}Thống kê — Lab Monitor{% endblock %}
+{% block header_title %}Thống kê & Biểu đồ cảnh báo{% endblock %}
+{% block title_sub %}Statistics Dashboard{% endblock %}
+
+{% block extra_css %}
+<!-- Tải Chart.js qua CDN -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<style>
+    .cursor-pointer { cursor: pointer; transition: all 0.2s; }
+    .cursor-pointer:hover { background-color: #f8f9fa; }
+    .active-filter { background-color: #e9ecef; border-color: #007bff !important; box-shadow: 0 0 5px rgba(0,123,255,.25); }
+    .chart-container { position: relative; height: 300px; width: 100%; }
+</style>
+{% endblock %}
+
+{% block content %}
+<!-- Bộ lọc thời gian -->
+<div class="card card-outline card-primary shadow-sm mb-4">
+    <div class="card-body py-3">
+        <div class="row align-items-center">
+            <div class="col-md-2 mb-2 mb-md-0 font-weight-bold text-muted">
+                <i class="fas fa-filter mr-1"></i> Lọc theo:
+            </div>
+            <div class="col-md-5 mb-2 mb-md-0">
+                <div class="btn-group w-100" role="group">
+                    <button type="button" class="btn btn-outline-primary" id="btn-day" onclick="setRange('day')">Hôm nay</button>
+                    <button type="button" class="btn btn-primary active" id="btn-week" onclick="setRange('week')">7 ngày qua</button>
+                    <button type="button" class="btn btn-outline-primary" id="btn-month" onclick="setRange('month')">30 ngày qua</button>
+                    <button type="button" class="btn btn-outline-primary" id="btn-custom" onclick="setRange('custom')">Tùy chọn</button>
+                </div>
+            </div>
+            <div class="col-md-5">
+                <!-- Date picker (ẩn theo mặc định) -->
+                <div class="input-group" id="date-picker-wrap" style="display: none;">
+                    <div class="input-group-prepend">
+                        <span class="input-group-text"><i class="far fa-calendar-alt"></i></span>
+                    </div>
+                    <input type="date" id="start-date" class="form-control" onchange="loadStatsData()">
+                    <div class="input-group-prepend input-group-append">
+                        <span class="input-group-text">đến</span>
+                    </div>
+                    <input type="date" id="end-date" class="form-control" onchange="loadStatsData()">
+                </div>
+                
+                <div class="text-right text-muted small mt-1" id="date-label">
+                    Thời gian báo cáo: --/--/---- đến --/--/----
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- KPI Cards (Small Boxes) -->
+<div class="row">
+    <!-- KPI 1 -->
+    <div class="col-lg-3 col-6">
+        <div class="small-box bg-info">
+            <div class="inner">
+                <h3 id="kpi-total">0</h3>
+                <p>Tổng số cảnh báo</p>
+                <div class="small" id="kpi-total-desc">Đã phát sinh trong kỳ</div>
+            </div>
+            <div class="icon">
+                <i class="fas fa-bell"></i>
+            </div>
+        </div>
+    </div>
+    <!-- KPI 2 -->
+    <div class="col-lg-3 col-6">
+        <div class="small-box bg-danger">
+            <div class="inner">
+                <h3 id="kpi-roi" style="font-size: 1.8rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">N/A</h3>
+                <p>Vùng ROI vi phạm nhiều</p>
+                <div class="small" id="kpi-roi-count">0 lượt vi phạm</div>
+            </div>
+            <div class="icon">
+                <i class="fas fa-vector-square"></i>
+            </div>
+        </div>
+    </div>
+    <!-- KPI 3 -->
+    <div class="col-lg-3 col-6">
+        <div class="small-box bg-warning">
+            <div class="inner">
+                <h3 id="kpi-pose" style="font-size: 1.8rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">N/A</h3>
+                <p>Tư thế vi phạm chủ yếu</p>
+                <div class="small" id="kpi-pose-count">0 lượt vi phạm</div>
+            </div>
+            <div class="icon">
+                <i class="fas fa-walking"></i>
+            </div>
+        </div>
+    </div>
+    <!-- KPI 4 -->
+    <div class="col-lg-3 col-6">
+        <div class="small-box bg-success">
+            <div class="inner">
+                <h3 id="kpi-level" style="font-size: 1.8rem;">N/A</h3>
+                <p>Mức độ chủ yếu</p>
+                <div class="small" id="kpi-level-count">0 lượt vi phạm</div>
+            </div>
+            <div class="icon">
+                <i class="fas fa-exclamation-triangle"></i>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Charts Row 1 -->
+<div class="row">
+    <div class="col-lg-8">
+        <div class="card card-primary card-outline shadow-sm">
+            <div class="card-header border-0">
+                <h3 class="card-title"><i class="fas fa-chart-line mr-1"></i> Xu hướng vi phạm theo thời gian</h3>
+            </div>
+            <div class="card-body">
+                <div class="chart-container">
+                    <canvas id="trendChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-4">
+        <div class="card card-info card-outline shadow-sm">
+            <div class="card-header border-0">
+                <h3 class="card-title"><i class="fas fa-chart-pie mr-1"></i> Tỷ lệ phân bố tư thế</h3>
+            </div>
+            <div class="card-body">
+                <div class="chart-container">
+                    <canvas id="poseChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Charts Row 2 -->
+<div class="row">
+    <div class="col-md-6">
+        <div class="card card-warning card-outline shadow-sm">
+            <div class="card-header border-0">
+                <h3 class="card-title"><i class="fas fa-chart-bar mr-1"></i> So sánh tần suất giữa các vùng ROI</h3>
+            </div>
+            <div class="card-body">
+                <div class="chart-container">
+                    <canvas id="roiChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Evaluation & Latency Benchmark (Giai đoạn 5 Tuần 12-13) -->
+<div class="card card-success card-outline shadow-sm mb-4">
+    <div class="card-header border-0">
+        <h3 class="card-title font-weight-bold text-success">
+            <i class="fas fa-check-circle mr-1"></i> 📊 Đánh giá Mô hình AI & Báo cáo Độ trễ Phản hồi Hệ thống (Evaluation & Latency Benchmark)
+        </h3>
+        <div class="card-tools">
+            <span class="badge badge-success">Giai đoạn 5 (Tuần 12-13)</span>
+        </div>
+    </div>
+    <div class="card-body">
+        <div class="row">
+            <div class="col-md-6 border-right">
+                <h5 class="font-weight-bold text-navy mb-3"><i class="fas fa-bullseye text-primary mr-1"></i> Chỉ số Đánh giá Mô hình AI (Pose Model Metrics)</h5>
+                <div class="row text-center mb-3">
+                    <div class="col-4">
+                        <h4 class="font-weight-bold text-success mb-0" id="eval-precision">--%</h4>
+                        <span class="text-muted small">Precision (Độ chính xác)</span>
+                    </div>
+                    <div class="col-4">
+                        <h4 class="font-weight-bold text-info mb-0" id="eval-recall">--%</h4>
+                        <span class="text-muted small">Recall (Độ phủ)</span>
+                    </div>
+                    <div class="col-4">
+                        <h4 class="font-weight-bold text-warning mb-0" id="eval-f1">--%</h4>
+                        <span class="text-muted small">F1-Score</span>
+                    </div>
+                </div>
+                <div class="progress mb-2" style="height: 10px;">
+                    <div class="progress-bar bg-success" id="bar-precision" style="width: 0%"></div>
+                </div>
+                <div class="d-flex justify-content-between text-xs text-muted">
+                    <span>True Positives (TP): <strong id="eval-tp" class="text-dark">0</strong></span>
+                    <span>False Positives (FP): <strong id="eval-fp" class="text-dark">0</strong></span>
+                    <span>False Negatives (FN): <strong id="eval-fn" class="text-dark">0</strong></span>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <h5 class="font-weight-bold text-navy mb-3"><i class="fas fa-stopwatch text-danger mr-1"></i> Thời gian Phản hồi Chuỗi Cảnh báo (End-to-End Latency)</h5>
+                <div class="d-flex align-items-center mb-2">
+                    <h3 class="font-weight-bold text-danger mb-0 mr-3" id="eval-latency-total">-- ms</h3>
+                    <span class="badge badge-light border text-muted">Tổng thời gian phản hồi thực tế</span>
+                </div>
+                <div class="text-xs text-muted mb-2">Phân rã thời gian xử lý (Breakdown):</div>
+                <ul class="list-group list-group-flush text-sm">
+                    <li class="list-group-item d-flex justify-content-between align-items-center py-1 px-0">
+                        <span><i class="fas fa-brain text-primary mr-1"></i> AI Inference (MediaPipe Pose):</span>
+                        <span class="badge badge-primary badge-pill" id="lat-ai">45 ms</span>
+                    </li>
+                    <li class="list-group-item d-flex justify-content-between align-items-center py-1 px-0">
+                        <span><i class="fas fa-vector-square text-info mr-1"></i> Ray Casting ROI Check:</span>
+                        <span class="badge badge-info badge-pill" id="lat-roi">5 ms</span>
+                    </li>
+                    <li class="list-group-item d-flex justify-content-between align-items-center py-1 px-0">
+                        <span><i class="fas fa-database text-secondary mr-1"></i> Ghi nhận Event Log DB:</span>
+                        <span class="badge badge-secondary badge-pill" id="lat-db">15 ms</span>
+                    </li>
+                    <li class="list-group-item d-flex justify-content-between align-items-center py-1 px-0">
+                        <span><i class="fab fa-telegram text-primary mr-1"></i> Telegram API (Bot Ban Ban):</span>
+                        <span class="badge badge-success badge-pill" id="lat-tg">95 ms</span>
+                    </li>
+                    <li class="list-group-item d-flex justify-content-between align-items-center py-1 px-0">
+                        <span><i class="fas fa-bell text-warning mr-1"></i> IoT Siren / Relay Trigger:</span>
+                        <span class="badge badge-warning badge-pill" id="lat-iot">25 ms</span>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let currentRange = 'week';
+let charts = {};
+
+// Khởi tạo các biểu đồ trống
+function initCharts() {
+    const commonOptions = {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+            legend: {
+                labels: { font: { family: 'Source Sans Pro' } }
+            }
+        },
+        scales: {
+            x: {
+                grid: { color: 'rgba(0, 0, 0, 0.05)' }
+            },
+            y: {
+                grid: { color: 'rgba(0, 0, 0, 0.05)' },
+                beginAtZero: true
+            }
+        }
+    };
+
+    // 1. Line Chart: Xu hướng
+    charts.trend = new Chart(document.getElementById('trendChart'), {
+        type: 'line',
+        data: { labels: [], datasets: [] },
+        options: {
+            ...commonOptions,
+            interaction: { mode: 'index', intersect: false },
+        }
+    });
+
+    // 2. Pie Chart: Tư thế
+    charts.pose = new Chart(document.getElementById('poseChart'), {
+        type: 'doughnut',
+        data: { labels: [], datasets: [] },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    position: 'bottom',
+                    labels: { font: { family: 'Source Sans Pro' } }
+                }
+            }
+        }
+    });
+
+    // 3. Bar Chart: ROI
+    charts.roi = new Chart(document.getElementById('roiChart'), {
+        type: 'bar',
+        data: { labels: [], datasets: [] },
+        options: {
+            ...commonOptions,
+            plugins: { legend: { display: false } }
+        }
+    });
+
+    // 4. Bar Chart: Level
+    charts.level = new Chart(document.getElementById('levelChart'), {
+        type: 'bar',
+        data: { labels: [], datasets: [] },
+        options: {
+            ...commonOptions,
+            indexAxis: 'y',
+            plugins: { legend: { display: false } }
+        }
+    });
+}
+
+// Thay đổi mốc thời gian lọc
+function setRange(range) {
+    currentRange = range;
+    
+    // Cập nhật giao diện nút
+    ['day', 'week', 'month', 'custom'].forEach(r => {
+        const btn = document.getElementById(`btn-${r}`);
+        if (r === range) {
+            btn.classList.remove('btn-outline-primary');
+            btn.classList.add('btn-primary', 'active');
+        } else {
+            btn.classList.add('btn-outline-primary');
+            btn.classList.remove('btn-primary', 'active');
+        }
+    });
+
+    const picker = document.getElementById('date-picker-wrap');
+    if (range === 'custom') {
+        picker.style.display = 'flex';
+        // Đặt mặc định 7 ngày trước đến hôm nay
+        const end = new Date();
+        const start = new Date();
+        start.setDate(start.getDate() - 7);
+        document.getElementById('start-date').value = start.toISOString().split('T')[0];
+        document.getElementById('end-date').value = end.toISOString().split('T')[0];
+    } else {
+        picker.style.display = 'none';
+    }
+
+    loadStatsData();
+}
+
+// Fetch dữ liệu từ API và cập nhật giao diện
+async function loadStatsData() {
+    let url = `/api/statistics/data?range=${currentRange}`;
+    if (currentRange === 'custom') {
+        const start = document.getElementById('start-date').value;
+        const end = document.getElementById('end-date').value;
+        if (!start || !end) return;
+        url += `&start_date=${start}&end_date=${end}`;
+    }
+
+    try {
+        const r = await fetch(url);
+        if (!r.ok) return;
+        const d = await r.json();
+
+        // 1. Cập nhật nhãn thời gian
+        document.getElementById('date-label').textContent = `Thời gian báo cáo: ${d.filters.start_date} – ${d.filters.end_date}`;
+
+        // 2. Cập nhật KPI Cards
+        document.getElementById('kpi-total').textContent = d.total_alerts;
+        document.getElementById('kpi-total-desc').textContent = d.filters.grouping === 'hourly' 
+            ? 'Cảnh báo ghi nhận theo giờ' 
+            : `Cảnh báo trong vòng ${(d.timeline.labels.length)} ngày`;
+
+        // ROI cao nhất
+        const maxRoi = getMaxValueKey(d.by_roi);
+        document.getElementById('kpi-roi').textContent = maxRoi;
+        document.getElementById('kpi-roi-count').textContent = d.by_roi[maxRoi] ? `${d.by_roi[maxRoi]} lượt vi phạm` : 'Không có vi phạm';
+
+        // Tư thế cao nhất
+        const maxPose = getMaxValueKey(d.by_pose);
+        document.getElementById('kpi-pose').textContent = maxPose;
+        document.getElementById('kpi-pose-count').textContent = d.by_pose[maxPose] ? `${d.by_pose[maxPose]} lượt vi phạm` : 'Không có vi phạm';
+
+        // Mức độ cao nhất
+        const maxLevel = getMaxValueKey(d.by_level);
+        document.getElementById('kpi-level').textContent = maxLevel;
+        document.getElementById('kpi-level-count').textContent = d.by_level[maxLevel] ? `${d.by_level[maxLevel]} lượt vi phạm` : 'Không có vi phạm';
+
+        // 3. Cập nhật biểu đồ Line: Xu hướng
+        charts.trend.data.labels = d.timeline.labels;
+        charts.trend.data.datasets = [{
+            label: 'Số ca vi phạm',
+            data: d.timeline.data,
+            borderColor: '#007bff',
+            backgroundColor: 'rgba(0, 123, 255, 0.1)',
+            borderWidth: 2,
+            tension: 0.3,
+            fill: true,
+            pointBackgroundColor: '#007bff',
+            pointRadius: d.filters.grouping === 'hourly' ? 2 : 4
+        }];
+        charts.trend.update();
+
+        // 4. Cập nhật biểu đồ Pie: Tư thế
+        const poseKeys = Object.keys(d.by_pose);
+        const poseValues = Object.values(d.by_pose);
+        charts.pose.data.labels = poseKeys;
+        charts.pose.data.datasets = [{
+            data: poseValues,
+            backgroundColor: ['#dc3545', '#fd7e14', '#ffc107', '#28a745'],
+            borderWidth: 1,
+            borderColor: '#fff'
+        }];
+        charts.pose.update();
+
+        // 5. Cập nhật biểu đồ Bar: ROI
+        const roiKeys = Object.keys(d.by_roi);
+        const roiValues = Object.values(d.by_roi);
+        charts.roi.data.labels = roiKeys.length > 0 ? roiKeys : ['Không có dữ liệu'];
+        charts.roi.data.datasets = [{
+            data: roiValues.length > 0 ? roiValues : [0],
+            backgroundColor: 'rgba(23, 162, 184, 0.5)',
+            borderColor: '#17a2b8',
+            borderWidth: 1,
+            borderRadius: 4
+        }];
+        charts.roi.update();
+
+        // 6. Cập nhật biểu đồ Bar ngang: Level
+        const levelKeys = Object.keys(d.by_level);
+        const levelValues = Object.values(d.by_level);
+        charts.level.data.labels = levelKeys;
+        charts.level.data.datasets = [{
+            data: levelValues,
+            backgroundColor: ['rgba(220, 53, 69, 0.5)', 'rgba(253, 126, 20, 0.5)', 'rgba(255, 193, 7, 0.5)'],
+            borderColor: ['#dc3545', '#fd7e14', '#ffc107'],
+            borderWidth: 1,
+            borderRadius: 4
+        }];
+        charts.level.update();
+
+    } catch (e) {
+        console.error("Lỗi cập nhật biểu đồ thống kê:", e);
+    }
+}
+
+// Tìm key có value lớn nhất trong object
+function getMaxValueKey(obj) {
+    if (!obj || Object.keys(obj).length === 0) return 'N/A';
+    return Object.keys(obj).reduce((a, b) => obj[a] > obj[b] ? a : b);
+}
+
+function loadEvaluationMetrics() {
+    $.ajax({
+        url: '/api/statistics/evaluation',
+        method: 'GET',
+        success: function(res) {
+            if (res && res.metrics) {
+                const m = res.metrics;
+                $('#eval-precision').text(m.precision + '%');
+                $('#eval-recall').text(m.recall + '%');
+                $('#eval-f1').text(m.f1_score + '%');
+                $('#bar-precision').css('width', m.precision + '%');
+                $('#eval-tp').text(m.true_positives);
+                $('#eval-fp').text(m.false_positives);
+                $('#eval-fn').text(m.false_negatives);
+            }
+            if (res && res.latency_benchmark) {
+                const l = res.latency_benchmark;
+                $('#eval-latency-total').text(l.total_end_to_end_ms + ' ms');
+                if (l.breakdown) {
+                    $('#lat-ai').text(l.breakdown.ai_inference_ms + ' ms');
+                    $('#lat-roi').text(l.breakdown.ray_casting_ms + ' ms');
+                    $('#lat-db').text(l.breakdown.database_log_ms + ' ms');
+                    $('#lat-tg').text(l.breakdown.telegram_api_ms + ' ms');
+                    $('#lat-iot').text(l.breakdown.iot_trigger_ms + ' ms');
+                }
+            }
+        }
+    });
+}
+
+// Khởi chạy khi tải trang
+$(document.body).ready(function() {
+    initCharts();
+    loadStatsData();
+    loadEvaluationMetrics();
+});
+</script>
+{% endblock %}

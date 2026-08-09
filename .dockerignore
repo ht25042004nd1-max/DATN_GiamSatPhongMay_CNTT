@@ -1,0 +1,17 @@
+# Bỏ qua các file và thư mục này khi build Docker image để tối ưu hóa kích thước
+venv/
+.env
+.git/
+.gitignore
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+database/lab_monitor.db
+static/uploads/events/*
+.tempmediaStorage/
+.idea/
+.vscode/
+README.md
+Dockerfile
+docker-compose.yml

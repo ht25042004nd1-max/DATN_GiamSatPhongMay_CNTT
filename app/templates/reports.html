@@ -1,0 +1,127 @@
+{% extends "base.html" %}
+{% block title %}Báo cáo — Lab Monitor{% endblock %}
+{% block header_title %}Xuất báo cáo PDF{% endblock %}
+{% block title_sub %}Export Reports{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-8 col-lg-6">
+        <!-- FORM TẠO BÁO CÁO -->
+        <div class="card card-primary card-outline shadow">
+            <div class="card-header">
+                <h3 class="card-title">
+                    <i class="fas fa-file-pdf text-danger mr-1"></i> Tạo báo cáo PDF
+                </h3>
+            </div>
+            
+            <div class="card-body">
+                <form id="report-form" action="/api/reports/export" method="GET">
+                    <div class="form-group">
+                        <label>Chọn khoảng thời gian báo cáo</label>
+                        <div class="btn-group btn-group-toggle d-flex" data-toggle="buttons">
+                            <label class="btn btn-outline-primary active" onclick="selectRange('day')">
+                                <input type="radio" name="range" value="day" checked autocomplete="off"> 
+                                <i class="fas fa-sun mr-1"></i> Hôm nay
+                            </label>
+                            <label class="btn btn-outline-primary" onclick="selectRange('week')">
+                                <input type="radio" name="range" value="week" autocomplete="off"> 
+                                <i class="fas fa-calendar-week mr-1"></i> Tuần này
+                            </label>
+                            <label class="btn btn-outline-primary" onclick="selectRange('month')">
+                                <input type="radio" name="range" value="month" autocomplete="off"> 
+                                <i class="fas fa-calendar-alt mr-1"></i> Tháng này
+                            </label>
+                            <label class="btn btn-outline-primary" onclick="selectRange('custom')">
+                                <input type="radio" name="range" value="custom" autocomplete="off"> 
+                                <i class="fas fa-cogs mr-1"></i> Tùy chọn
+                            </label>
+                        </div>
+                    </div>
+
+                    <!-- Date Inputs (Chỉ hiện khi chọn custom) -->
+                    <div class="form-group" id="custom-dates-wrap" style="display: none;">
+                        <label>Khoảng ngày tùy chỉnh</label>
+                        <div class="row">
+                            <div class="col-sm-6 mb-2 mb-sm-0">
+                                <label class="text-muted" style="font-size: 0.8rem;">TỪ NGÀY</label>
+                                <input type="date" id="report-start" name="start_date" class="form-control">
+                            </div>
+                            <div class="col-sm-6">
+                                <label class="text-muted" style="font-size: 0.8rem;">ĐẾN NGÀY</label>
+                                <input type="date" id="report-end" name="end_date" class="form-control">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Button Tạo Báo cáo -->
+                    <button type="submit" class="btn btn-primary btn-block btn-lg mt-4">
+                        <i class="fas fa-download mr-1"></i> Tải xuống báo cáo PDF
+                    </button>
+                </form>
+            </div>
+        </div>
+        <!-- /.card -->
+
+        <!-- THÔNG TIN BÁO CÁO -->
+        <div class="card card-info card-outline shadow">
+            <div class="card-header">
+                <h3 class="card-title">
+                    <i class="fas fa-info-circle text-info mr-1"></i> Thông tin PDF
+                </h3>
+            </div>
+            <div class="card-body">
+                <ul class="list-unstyled mb-0 text-muted" style="font-size: 0.9rem;">
+                    <li class="mb-2">
+                        <i class="fas fa-check text-success mr-2"></i> 
+                        Báo cáo PDF được sinh tự động bao gồm: Tiêu đề trường/khoa, mốc thời gian, tổng số ca vi phạm, tỷ lệ phân bố tư thế và bảng chi tiết các cảnh báo.
+                    </li>
+                    <li class="mb-2">
+                        <i class="fas fa-camera text-info mr-2"></i> 
+                        <b>Đính kèm ảnh minh chứng:</b> PDF sẽ tự động trích xuất ảnh chụp từ Camera lúc vi phạm đối với các sự kiện có mức độ nghiêm trọng (Cao & Trung bình).
+                    </li>
+                    <li>
+                        <i class="fas fa-print text-primary mr-2"></i> 
+                        Báo cáo có định dạng chuẩn khổ giấy Letter/A4, thuận tiện cho việc in ấn hoặc lưu trữ nội bộ phòng thực hành CNTT.
+                    </li>
+                </ul>
+            </div>
+        </div>
+        <!-- /.card -->
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function selectRange(range) {
+    const customWrap = document.getElementById('custom-dates-wrap');
+    if (range === 'custom') {
+        customWrap.style.display = 'block';
+        // Mặc định 7 ngày trước đến hôm nay nếu chưa có giá trị
+        const startInput = document.getElementById('report-start');
+        const endInput = document.getElementById('report-end');
+        if (!startInput.value) {
+            const end = new Date();
+            const start = new Date();
+            start.setDate(start.getDate() - 7);
+            startInput.value = start.toISOString().split('T')[0];
+            endInput.value = end.toISOString().split('T')[0];
+        }
+    } else {
+        customWrap.style.display = 'none';
+    }
+}
+
+document.getElementById('report-form').addEventListener('submit', function(e) {
+    const range = document.querySelector('input[name="range"]:checked').value;
+    if (range === 'custom') {
+        const start = document.getElementById('report-start').value;
+        const end = document.getElementById('report-end').value;
+        if (!start || !end) {
+            e.preventDefault();
+            alert("Vui lòng chọn đầy đủ ngày bắt đầu và ngày kết thúc!");
+        }
+    }
+});
+</script>
+{% endblock %}

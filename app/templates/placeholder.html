@@ -1,0 +1,125 @@
+{% extends "base.html" %}
+{% block title %}{{ page_title }} — Lab Monitor{% endblock %}
+{% block header_title %}{{ page_title }}{% endblock %}
+
+{% block extra_css %}
+<style>
+.placeholder-wrap {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: calc(100vh - var(--header-h) - 80px);
+}
+
+.placeholder-card {
+    text-align: center;
+    padding: 60px 48px;
+    border-radius: 24px;
+    max-width: 480px;
+    width: 100%;
+    position: relative;
+    overflow: hidden;
+
+    background: rgba(255,255,255,0.04);
+    backdrop-filter: blur(24px) saturate(160%);
+    -webkit-backdrop-filter: blur(24px) saturate(160%);
+    border: 1px solid rgba(255,255,255,0.08);
+    box-shadow:
+        0 12px 48px rgba(0,0,0,0.5),
+        inset 0 1px 0 rgba(255,255,255,0.08);
+}
+
+/* Ánh sáng khúc xạ trên cạnh card */
+.placeholder-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 15%; right: 15%;
+    height: 1px;
+    background: linear-gradient(to right, transparent, rgba(255,255,255,0.15), transparent);
+}
+
+/* Orb màu nền */
+.placeholder-card::after {
+    content: '';
+    position: absolute;
+    bottom: -60px; right: -60px;
+    width: 200px; height: 200px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(0,212,255,0.08), transparent);
+    filter: blur(30px);
+    pointer-events: none;
+}
+
+.ph-icon {
+    font-size: 3.5rem;
+    margin-bottom: 20px;
+    display: block;
+    filter: drop-shadow(0 0 16px rgba(0,212,255,0.3));
+    animation: float 3s ease-in-out infinite;
+}
+@keyframes float {
+    0%,100% { transform: translateY(0); }
+    50%     { transform: translateY(-8px); }
+}
+
+.ph-title {
+    font-size: 1.3rem;
+    font-weight: 700;
+    margin-bottom: 10px;
+    background: linear-gradient(135deg, #e2e8f0, var(--aqua));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+
+.ph-page-name {
+    display: inline-block;
+    padding: 4px 14px;
+    border-radius: 20px;
+    background: rgba(0,212,255,0.10);
+    border: 1px solid rgba(0,212,255,0.25);
+    color: var(--aqua);
+    font-size: 0.85rem;
+    font-weight: 600;
+    margin-bottom: 16px;
+}
+
+.ph-desc {
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    line-height: 1.7;
+    margin-bottom: 28px;
+}
+
+.ph-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 20px;
+    border-radius: 20px;
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--yellow);
+    background: rgba(255,193,7,0.08);
+    border: 1px solid rgba(255,193,7,0.2);
+    backdrop-filter: blur(8px);
+    box-shadow: 0 0 16px rgba(255,193,7,0.08);
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="placeholder-wrap">
+    <div class="placeholder-card">
+        <span class="ph-icon">🚧</span>
+        <div class="ph-title">Đang Phát Triển</div>
+        <div class="ph-page-name">{{ page_title }}</div>
+        <p class="ph-desc">
+            Trang này đang được xây dựng và sẽ hoàn thiện ở giai đoạn tiếp theo của dự án.
+        </p>
+        <div class="ph-badge">
+            <span>⏳</span> Khu vực này sẽ được code ở giai đoạn sau
+        </div>
+    </div>
+</div>
+{% endblock %}

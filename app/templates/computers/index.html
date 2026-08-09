@@ -1,0 +1,225 @@
+{% extends "base.html" %}
+{% block title %}Quản lý Máy tính — Lab Monitor{% endblock %}
+{% block header_title %}Quản lý Máy tính{% endblock %}
+{% block title_sub %}Computer Management{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title"><i class="fas fa-desktop mr-2 text-primary"></i>Danh sách Máy tính</h3>
+                <div class="card-tools">
+                    <button class="btn btn-primary btn-sm" data-toggle="modal" data-target="#modalAddComp">
+                        <i class="fas fa-plus"></i> Thêm Máy tính
+                    </button>
+                </div>
+            </div>
+            <div class="card-body table-responsive p-0">
+                <table class="table table-hover table-striped text-nowrap">
+                    <thead class="thead-dark">
+                        <tr>
+                            <th>ID</th>
+                            <th>Tên Máy</th>
+                            <th>Phòng máy</th>
+                            <th>IP Address</th>
+                            <th>MAC Address</th>
+                            <th>Trạng thái</th>
+                            <th>Hành động</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for comp in computers %}
+                        <tr id="row-comp-{{ comp.id }}">
+                            <td>{{ comp.id }}</td>
+                            <td><strong>{{ comp.name }}</strong></td>
+                            <td>{{ comp.room.name if comp.room else '-' }}</td>
+                            <td>{{ comp.ip_address or '-' }}</td>
+                            <td><code>{{ comp.mac_address or '-' }}</code></td>
+                            <td>
+                                {% if comp.status == 'online' %}
+                                <span class="badge badge-success">Online</span>
+                                {% elif comp.status == 'maintenance' %}
+                                <span class="badge badge-warning">Bảo trì</span>
+                                {% else %}
+                                <span class="badge badge-secondary">Offline</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <button class="btn btn-sm btn-info" title="Sửa"
+                                    onclick="openEditComp({{ comp.id }}, '{{ comp.name }}', {{ comp.room_id }}, '{{ comp.ip_address or '' }}', '{{ comp.mac_address or '' }}', '{{ comp.status }}')">
+                                    <i class="fas fa-edit"></i>
+                                </button>
+                                <button class="btn btn-sm btn-danger" title="Xóa" onclick="deleteComp({{ comp.id }}, '{{ comp.name }}')">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="7" class="text-center text-muted py-4"><i class="fas fa-desktop fa-2x mb-2"></i><br>Chưa có máy tính nào.</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Thêm Máy tính -->
+<div class="modal fade" id="modalAddComp" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title"><i class="fas fa-plus mr-2"></i>Thêm Máy tính mới</h5>
+                <button type="button" class="close text-white" data-dismiss="modal"><span>&times;</span></button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>Tên máy <span class="text-danger">*</span></label>
+                    <input type="text" id="add-comp-name" class="form-control" placeholder="VD: Máy 01">
+                </div>
+                <div class="form-group">
+                    <label>Phòng máy <span class="text-danger">*</span></label>
+                    <select id="add-comp-room" class="form-control">
+                        <option value="">-- Chọn phòng --</option>
+                        {% for r in rooms %}
+                        <option value="{{ r.id }}">{{ r.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="form-row">
+                    <div class="form-group col-md-6">
+                        <label>IP Address</label>
+                        <input type="text" id="add-comp-ip" class="form-control" placeholder="192.168.1.xx">
+                    </div>
+                    <div class="form-group col-md-6">
+                        <label>MAC Address</label>
+                        <input type="text" id="add-comp-mac" class="form-control" placeholder="AA:BB:CC:DD:EE:FF">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Trạng thái</label>
+                    <select id="add-comp-status" class="form-control">
+                        <option value="offline">Offline</option>
+                        <option value="online">Online</option>
+                        <option value="maintenance">Bảo trì</option>
+                    </select>
+                </div>
+                <div class="alert alert-danger d-none mt-2" id="add-comp-error"></div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" data-dismiss="modal">Hủy</button>
+                <button class="btn btn-primary" id="btn-add-comp" onclick="submitAddComp()">
+                    <i class="fas fa-save mr-1"></i>Lưu
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Sửa Máy tính -->
+<div class="modal fade" id="modalEditComp" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-info text-white">
+                <h5 class="modal-title"><i class="fas fa-edit mr-2"></i>Sửa thông tin Máy tính</h5>
+                <button type="button" class="close text-white" data-dismiss="modal"><span>&times;</span></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="edit-comp-id">
+                <div class="form-group">
+                    <label>Tên máy <span class="text-danger">*</span></label>
+                    <input type="text" id="edit-comp-name" class="form-control">
+                </div>
+                <div class="form-group">
+                    <label>Phòng máy <span class="text-danger">*</span></label>
+                    <select id="edit-comp-room" class="form-control">
+                        {% for r in rooms %}
+                        <option value="{{ r.id }}">{{ r.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="form-row">
+                    <div class="form-group col-md-6">
+                        <label>IP Address</label>
+                        <input type="text" id="edit-comp-ip" class="form-control">
+                    </div>
+                    <div class="form-group col-md-6">
+                        <label>MAC Address</label>
+                        <input type="text" id="edit-comp-mac" class="form-control">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Trạng thái</label>
+                    <select id="edit-comp-status" class="form-control">
+                        <option value="offline">Offline</option>
+                        <option value="online">Online</option>
+                        <option value="maintenance">Bảo trì</option>
+                    </select>
+                </div>
+                <div class="alert alert-danger d-none mt-2" id="edit-comp-error"></div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" data-dismiss="modal">Hủy</button>
+                <button class="btn btn-info" onclick="submitEditComp()"><i class="fas fa-save mr-1"></i>Cập nhật</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function submitAddComp() {
+    const name = $('#add-comp-name').val().trim();
+    const room_id = $('#add-comp-room').val();
+    if (!name || !room_id) { showError('add-comp-error', 'Vui lòng điền đầy đủ tên và phòng'); return; }
+    $('#btn-add-comp').prop('disabled', true).html('<i class="fas fa-spinner fa-spin mr-1"></i>Đang lưu...');
+    $.ajax({
+        url: '/api/computers', method: 'POST', contentType: 'application/json',
+        data: JSON.stringify({ name, room_id: parseInt(room_id), ip_address: $('#add-comp-ip').val().trim() || null, mac_address: $('#add-comp-mac').val().trim() || null, status: $('#add-comp-status').val() }),
+        success: () => location.reload(),
+        error: (xhr) => { showError('add-comp-error', xhr.responseJSON?.error || 'Lỗi'); $('#btn-add-comp').prop('disabled', false).html('<i class="fas fa-save mr-1"></i>Lưu'); }
+    });
+}
+
+function openEditComp(id, name, room_id, ip, mac, status) {
+    $('#edit-comp-id').val(id); $('#edit-comp-name').val(name);
+    $('#edit-comp-room').val(room_id); $('#edit-comp-ip').val(ip);
+    $('#edit-comp-mac').val(mac); $('#edit-comp-status').val(status);
+    $('#edit-comp-error').addClass('d-none');
+    $('#modalEditComp').modal('show');
+}
+
+function submitEditComp() {
+    const id = $('#edit-comp-id').val();
+    const name = $('#edit-comp-name').val().trim();
+    if (!name) { showError('edit-comp-error', 'Tên không được để trống'); return; }
+    $.ajax({
+        url: '/api/computers/' + id, method: 'PUT', contentType: 'application/json',
+        data: JSON.stringify({ name, room_id: parseInt($('#edit-comp-room').val()), ip_address: $('#edit-comp-ip').val().trim() || null, mac_address: $('#edit-comp-mac').val().trim() || null, status: $('#edit-comp-status').val() }),
+        success: () => location.reload(),
+        error: (xhr) => showError('edit-comp-error', xhr.responseJSON?.error || 'Lỗi')
+    });
+}
+
+function deleteComp(id, name) {
+    if (!confirm(`Xóa máy tính "${name}"?`)) return;
+    $.ajax({
+        url: '/api/computers/' + id, method: 'DELETE',
+        success: () => { $('#row-comp-' + id).remove(); toastr.success('Đã xóa máy tính ' + name); },
+        error: (xhr) => toastr.error(xhr.responseJSON?.message || 'Lỗi')
+    });
+}
+
+function showError(elemId, msg) { $('#' + elemId).text(msg).removeClass('d-none'); }
+
+$('#modalAddComp').on('hidden.bs.modal', function() {
+    $('#add-comp-name, #add-comp-ip, #add-comp-mac').val(''); $('#add-comp-room').val('');
+    $('#add-comp-status').val('offline'); $('#add-comp-error').addClass('d-none');
+    $('#btn-add-comp').prop('disabled', false).html('<i class="fas fa-save mr-1"></i>Lưu');
+});
+</script>
+{% endblock %}

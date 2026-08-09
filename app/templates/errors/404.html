@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}404 — Không tìm thấy{% endblock %}
+{% block header_title %}Lỗi 404 — Không tìm thấy{% endblock %}
+
+{% block content %}
+<div style="display:flex; align-items:center; justify-content:center; min-height:calc(100vh - var(--header-h) - 80px);">
+<div style="text-align:center; padding:56px 48px; max-width:460px; width:100%;
+            background:rgba(255,255,255,0.04); backdrop-filter:blur(24px);
+            border:1px solid rgba(255,255,255,0.08); border-radius:24px;
+            box-shadow:0 12px 48px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.06);">
+    <div style="font-size:4rem; margin-bottom:16px; animation:float 3s ease-in-out infinite;">🔭</div>
+    <div style="font-size:4rem; font-weight:800; color:var(--text-sub); margin-bottom:8px;
+                letter-spacing:-2px;">404</div>
+    <h2 style="font-size:1.15rem; font-weight:600; margin-bottom:10px; color:var(--text-primary);">
+        Không tìm thấy trang
+    </h2>
+    <p style="color:var(--text-muted); font-size:0.84rem; margin-bottom:28px; line-height:1.7;">
+        Đường dẫn bạn tìm không tồn tại hoặc đã bị xóa.<br>Kiểm tra lại URL và thử lại.
+    </p>
+    <a href="{{ url_for('main.dashboard') }}"
+       style="display:inline-flex; align-items:center; gap:8px; padding:9px 24px;
+              background:rgba(0,212,255,0.1); color:var(--aqua);
+              border:1px solid rgba(0,212,255,0.25); border-radius:20px;
+              font-size:0.82rem; font-weight:600; backdrop-filter:blur(8px);
+              box-shadow:0 0 16px rgba(0,212,255,0.1);">
+        ← Về Dashboard
+    </a>
+</div>
+</div>
+<style>
+@keyframes float { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-8px)} }
+</style>
+{% endblock %}

@@ -1,0 +1,381 @@
+{% extends "base.html" %}
+{% block title %}Thiết bị IoT — VIU Lab Monitor{% endblock %}
+{% block header_title %}Thiết bị IoT{% endblock %}
+{% block title_sub %}IoT Devices{% endblock %}
+
+{% block extra_css %}
+<style>
+/* Tùy chỉnh mô phỏng thiết bị */
+.device-indicator {
+    width: 60px;
+    height: 60px;
+    border-radius: 50%;
+    background-color: #f4f6f9;
+    border: 2px solid #dee2e6;
+    margin: 0 auto 15px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.8rem;
+    transition: all 0.3s;
+}
+
+/* Đèn LED nhấp nháy */
+.led-active {
+    background-color: #e8f4fd;
+    border-color: #17a2b8;
+    color: #17a2b8;
+    box-shadow: 0 0 15px rgba(23, 162, 184, 0.5);
+    animation: led-pulse 1.5s infinite;
+}
+
+/* Còi báo động rung */
+.buzzer-active {
+    background-color: #fff5f5;
+    border-color: #dc3545;
+    color: #dc3545;
+    box-shadow: 0 0 15px rgba(220, 53, 69, 0.5);
+    animation: buzzer-shake 0.15s infinite alternate;
+}
+
+/* Relay đóng mạch */
+.relay-active {
+    background-color: #f0fff4;
+    border-color: #28a745;
+    color: #28a745;
+    box-shadow: 0 0 15px rgba(40, 167, 69, 0.5);
+}
+
+@keyframes led-pulse {
+    0% { transform: scale(1); opacity: 0.9; }
+    50% { transform: scale(1.05); opacity: 1; box-shadow: 0 0 20px rgba(23, 162, 184, 0.7); }
+    100% { transform: scale(1); opacity: 0.9; }
+}
+
+@keyframes buzzer-shake {
+    0% { transform: rotate(-3deg) scale(1.03); }
+    100% { transform: rotate(3deg) scale(1.03); }
+}
+
+.device-widget-card {
+    transition: transform 0.2s;
+}
+.device-widget-card:hover {
+    transform: translateY(-2px);
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row mb-3">
+    <div class="col-12 d-flex justify-content-between align-items-center">
+        <h2 class="h5 font-weight-bold text-navy m-0">Quản lý ngoại vi ESP32</h2>
+        <span id="global-iot-toggle" class="badge badge-secondary p-2">Tính năng: Đang kiểm tra...</span>
+    </div>
+</div>
+
+<div class="row">
+    <!-- Cột trái: Cấu hình kết nối & IP -->
+    <div class="col-md-5">
+        <div class="card card-outline card-primary">
+            <div class="card-header">
+                <h3 class="card-title font-weight-bold">
+                    <i class="fas fa-plug mr-1 text-primary"></i> Kết nối thiết bị
+                </h3>
+            </div>
+            <div class="card-body">
+                <!-- Info Status -->
+                <div class="callout callout-info mb-3 d-flex justify-content-between align-items-center">
+                    <div>
+                        <h5 class="font-weight-bold mb-1">ESP32 Controller</h5>
+                        <p id="device-meta" class="text-sm text-muted m-0">Đang kết nối...</p>
+                    </div>
+                    <div>
+                        <span id="status-badge" class="badge badge-secondary p-2" style="font-size: 0.85rem;">OFFLINE</span>
+                    </div>
+                </div>
+
+                <!-- IP Configuration Form -->
+                <div class="form-group">
+                    <label for="esp32-ip" class="font-weight-bold text-xs text-uppercase text-secondary">
+                        ĐỊA CHỈ IP ESP32 (HTTP REST API)
+                    </label>
+                    <div class="input-group">
+                        <input type="text" id="esp32-ip" class="form-control" placeholder="http://192.168.1.100">
+                        <div class="input-group-append">
+                            <button class="btn btn-primary font-weight-bold" type="button" onclick="saveIotIp()">
+                                Cập nhật IP
+                            </button>
+                        </div>
+                    </div>
+                    <small class="form-text text-muted">
+                        Mặc định của ESP32 Giả lập cục bộ: <code>http://127.0.0.1:5000/mock_esp32</code>. Khi có mạch thật, hãy nhập địa chỉ IP WiFi của mạch.
+                    </small>
+                </div>
+
+                <div class="alert alert-success mt-2" id="ip-status-ok" style="display: none;"></div>
+                <div class="alert alert-danger mt-2" id="ip-status-err" style="display: none;"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Cột phải: Bảng điều khiển thiết bị mô phỏng -->
+    <div class="col-md-7">
+        <div class="card card-outline card-navy">
+            <div class="card-header">
+                <h3 class="card-title font-weight-bold">
+                    <i class="fas fa-desktop mr-1 text-navy"></i> Mô phỏng thiết bị đầu ra
+                </h3>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <!-- LED Widget -->
+                    <div class="col-sm-4 mb-3">
+                        <div class="card text-center p-3 device-widget-card border shadow-sm">
+                            <div id="led-indicator" class="device-indicator">💡</div>
+                            <h5 class="font-weight-bold mb-1" style="font-size: 0.95rem;">Đèn LED Cảnh báo</h5>
+                            <p id="led-status" class="text-xs text-muted mb-3">Đang tắt</p>
+                            <div class="btn-group btn-group-sm w-100">
+                                <button class="btn btn-outline-success font-weight-bold btn-ctrl" onclick="manualControl('led', 1, 10)">
+                                    BẬT 10s
+                                </button>
+                                <button class="btn btn-outline-danger font-weight-bold btn-ctrl" onclick="manualControl('led', 0)">
+                                    TẮT
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Buzzer Widget -->
+                    <div class="col-sm-4 mb-3">
+                        <div class="card text-center p-3 device-widget-card border shadow-sm">
+                            <div id="buzzer-indicator" class="device-indicator">🔊</div>
+                            <h5 class="font-weight-bold mb-1" style="font-size: 0.95rem;">Còi báo động</h5>
+                            <p id="buzzer-status" class="text-xs text-muted mb-3">Đang tắt</p>
+                            <div class="btn-group btn-group-sm w-100">
+                                <button class="btn btn-outline-success font-weight-bold btn-ctrl" onclick="manualControl('buzzer', 1, 10)">
+                                    KÊU 10s
+                                </button>
+                                <button class="btn btn-outline-danger font-weight-bold btn-ctrl" onclick="manualControl('buzzer', 0)">
+                                    TẮT
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Relay Widget -->
+                    <div class="col-sm-4 mb-3">
+                        <div class="card text-center p-3 device-widget-card border shadow-sm">
+                            <div id="relay-indicator" class="device-indicator">⚡</div>
+                            <h5 class="font-weight-bold mb-1" style="font-size: 0.95rem;">Relay điều khiển</h5>
+                            <p id="relay-status" class="text-xs text-muted mb-3">Ngắt mạch</p>
+                            <div class="btn-group btn-group-sm w-100">
+                                <button class="btn btn-outline-success font-weight-bold btn-ctrl" onclick="manualControl('relay', 1)">
+                                    ĐÓNG
+                                </button>
+                                <button class="btn btn-outline-danger font-weight-bold btn-ctrl" onclick="manualControl('relay', 0)">
+                                    NGẮT
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Bảng Giả lập Cảm biến Tương tác (Interactive Sensor Simulator) -->
+                <div class="card card-outline card-warning mt-3">
+                    <div class="card-header bg-light">
+                        <h4 class="card-title font-weight-bold text-dark" style="font-size: 0.95rem;">
+                            <i class="fas fa-sliders-h text-warning mr-1"></i> Bảng Giả lập Cảm biến Tương tác (Dùng cho Demo ĐATN)
+                        </h4>
+                    </div>
+                    <div class="card-body p-3">
+                        <div class="form-group mb-3">
+                            <label class="d-flex justify-content-between text-xs font-weight-bold">
+                                <span>Giả lập Nhiệt độ phòng (°C):</span>
+                                <span class="text-danger font-weight-bold" id="sim-temp-val">28.5 °C</span>
+                            </label>
+                            <input type="range" class="custom-range" id="sim-temp-slider" min="20" max="60" step="0.5" value="28.5" oninput="$('#sim-temp-val').text(this.value + ' °C')">
+                        </div>
+                        <div class="row">
+                            <div class="col-6">
+                                <button class="btn btn-block btn-outline-danger btn-sm font-weight-bold" id="sim-btn-smoke" onclick="toggleSimSmoke()">
+                                    💨 Khói/Gas: BÌNH THƯỜNG
+                                </button>
+                            </div>
+                            <div class="col-6">
+                                <button class="btn btn-block btn-outline-secondary btn-sm font-weight-bold" id="sim-btn-door" onclick="toggleSimDoor()">
+                                    🚪 Trạng thái Cửa: ĐÓNG
+                                </button>
+                            </div>
+                        </div>
+                        <button class="btn btn-warning btn-block font-weight-bold mt-3 shadow-sm" onclick="sendSimulatedHeartbeat()">
+                            <i class="fas fa-paper-plane mr-1"></i> Gửi Tín hiệu Heartbeat Giả lập tới Backend
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    function updateIotStatus() {
+        $.ajax({
+            url: '/api/iot/status',
+            method: 'GET',
+            success: function(d) {
+                // 1. Cập nhật toggle global config
+                var toggleEl = $('#global-iot-toggle');
+                if (d.enabled) {
+                    toggleEl.attr('class', 'badge badge-success p-2').text('Tính năng: ĐÃ BẬT');
+                } else {
+                    toggleEl.attr('class', 'badge badge-danger p-2').text('Tính năng: ĐÃ TẮT');
+                }
+
+                // 2. Cập nhật IP input
+                var ipInput = $('#esp32-ip');
+                if (!ipInput.val() && d.esp32_ip) {
+                    ipInput.val(d.esp32_ip);
+                }
+
+                // 3. Cập nhật kết nối
+                var badge = $('#status-badge');
+                var meta = $('#device-meta');
+                if (d.is_online) {
+                    badge.attr('class', 'badge badge-success p-2').text('ONLINE');
+                    meta.html('IP: <b>' + d.ip + '</b> · Heartbeat: ' + d.last_seen_seconds_ago + 's trước');
+                    $('.btn-ctrl').prop('disabled', false);
+                } else {
+                    badge.attr('class', 'badge badge-danger p-2').text('OFFLINE');
+                    meta.html('Cấu hình: <code>' + d.esp32_ip + '</code>');
+                    $('.btn-ctrl').prop('disabled', true);
+                }
+
+                // 4. Cập nhật output widgets
+                updateWidget('led', d.devices.led);
+                updateWidget('buzzer', d.devices.buzzer);
+                updateWidget('relay', d.devices.relay);
+            },
+            error: function() {
+                $('#global-iot-toggle').attr('class', 'badge badge-secondary p-2').text('Lỗi kết nối máy chủ');
+                $('#status-badge').attr('class', 'badge badge-secondary p-2').text('LỖI');
+                $('#device-meta').html('Không thể kết nối đến server');
+                $('.btn-ctrl').prop('disabled', true);
+            }
+        });
+    }
+
+    function updateWidget(device, isActive) {
+        var indicator = $('#' + device + '-indicator');
+        var statusText = $('#' + device + '-status');
+
+        if (isActive === 1) {
+            indicator.addClass(device + '-active');
+            statusText.html('<span class="text-success font-weight-bold">ĐANG HOẠT ĐỘNG</span>');
+        } else {
+            indicator.removeClass(device + '-active');
+            statusText.text(device === 'relay' ? 'Ngắt mạch' : 'Đang tắt');
+        }
+    }
+
+    function manualControl(device, status, duration = 0) {
+        $.ajax({
+            url: '/api/iot/control_manual',
+            method: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify({ device: device, status: status, duration: duration }),
+            success: function(d) {
+                if (d.success) {
+                    updateWidget(device, status);
+                } else {
+                    alert('Lỗi điều khiển: ' + (d.error || d.message));
+                }
+            },
+            error: function(xhr) {
+                alert('Không thể kết nối API điều khiển: ' + xhr.responseText);
+            }
+        });
+    }
+
+    // ── Giả lập Cảm biến IoT ──────────────────────────────
+    let simSmokeState = 0;
+    let simDoorState = 1;
+
+    function toggleSimSmoke() {
+        simSmokeState = simSmokeState === 0 ? 1 : 0;
+        const btn = $('#sim-btn-smoke');
+        if (simSmokeState === 1) {
+            btn.removeClass('btn-outline-danger').addClass('btn-danger').html('🔥 Khói/Gas: CÓ KHÓI!');
+        } else {
+            btn.removeClass('btn-danger').addClass('btn-outline-danger').html('💨 Khói/Gas: BÌNH THƯỜNG');
+        }
+    }
+
+    function toggleSimDoor() {
+        simDoorState = simDoorState === 1 ? 0 : 1;
+        const btn = $('#sim-btn-door');
+        if (simDoorState === 0) {
+            btn.removeClass('btn-outline-secondary').addClass('btn-warning').html('🚪 Trạng thái Cửa: MỞ');
+        } else {
+            btn.removeClass('btn-warning').addClass('btn-outline-secondary').html('🚪 Trạng thái Cửa: ĐÓNG');
+        }
+    }
+
+    function sendSimulatedHeartbeat() {
+        const temp = parseFloat($('#sim-temp-slider').val());
+        const payload = {
+            ip: '192.168.1.100 (Simulator)',
+            sensors: {
+                temperature: temp,
+                humidity: 62.0,
+                smoke: simSmokeState,
+                door_closed: simDoorState
+            }
+        };
+
+        $.ajax({
+            url: '/api/iot/heartbeat',
+            method: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify(payload),
+            success: function() {
+                toastr.success('🚀 Đã gửi tín hiệu Heartbeat giả lập thành công!');
+                updateIotStatus();
+            },
+            error: function() {
+                toastr.error('Lỗi khi gửi Heartbeat giả lập!');
+            }
+        });
+    }
+
+    function saveIotIp() {
+        var ip = $('#esp32-ip').val().trim();
+        var okAlert = $('#ip-status-ok');
+        var errAlert = $('#ip-status-err');
+
+        okAlert.hide();
+        errAlert.hide();
+
+        $.ajax({
+            url: '/api/settings',
+            method: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify({ iot_esp32_ip: ip }),
+            success: function(d) {
+                okAlert.text('Cập nhật IP thành công!').show();
+                setTimeout(function() { okAlert.fadeOut(); }, 3000);
+            },
+            error: function(xhr) {
+                errAlert.text('Lỗi cập nhật: ' + xhr.responseText).show();
+            }
+        });
+    }
+
+    $(document).ready(function() {
+        updateIotStatus();
+        setInterval(updateIotStatus, 3000);
+    });
+</script>
+{% endblock %}

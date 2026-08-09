@@ -1,0 +1,16 @@
+version: '3.8'
+
+services:
+  web:
+    build: .
+    container_name: lab_monitor_web
+    ports:
+      - "5000:5000"
+    environment:
+      - SECRET_KEY=datn-giam-sat-phong-may-bi-mat
+      - CAMERA_SOURCE=0
+      - FLASK_ENV=production
+    volumes:
+      - ./database:/app/database
+      - ./static/uploads:/app/static/uploads
+    restart: always

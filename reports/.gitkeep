@@ -1,0 +1,2 @@
+# Thư mục này chứa file PDF báo cáo được xuất ra.
+# Các file PDF sẽ được bỏ qua bởi .gitignore (không commit lên Git).

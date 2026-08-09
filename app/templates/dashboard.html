@@ -1,0 +1,462 @@
+{% extends "base.html" %}
+{% block title %}Bảng điều khiển — VIU Lab Monitor{% endblock %}
+{% block header_title %}Bảng điều khiển{% endblock %}
+{% block title_sub %}Dashboard{% endblock %}
+
+{% block content %}
+<div class="row">
+    <!-- KPI 1: Số người hiện diện -->
+    <div class="col-lg-3 col-6">
+        <div class="small-box bg-info">
+            <div class="inner">
+                <h3 id="kpi-person-count">0</h3>
+                <p>Số người hiện diện</p>
+            </div>
+            <div class="icon">
+                <i class="fas fa-users"></i>
+            </div>
+            <a href="{{ url_for('main.monitor') }}" class="small-box-footer">
+                Xem chi tiết <i class="fas fa-arrow-circle-right"></i>
+            </a>
+        </div>
+    </div>
+
+    <!-- KPI 2: Trạng thái Camera -->
+    <div class="col-lg-3 col-6">
+        <div class="small-box bg-success">
+            <div class="inner">
+                <h3 id="kpi-cam-status">Offline</h3>
+                <p id="kpi-fps-text">Camera stream</p>
+            </div>
+            <div class="icon">
+                <i class="fas fa-video"></i>
+            </div>
+            <a href="{{ url_for('main.monitor') }}" class="small-box-footer">
+                Xem trực tiếp <i class="fas fa-arrow-circle-right"></i>
+            </a>
+        </div>
+    </div>
+
+    <!-- KPI 3: Cảnh báo chờ xử lý -->
+    <div class="col-lg-3 col-6">
+        <div class="small-box bg-danger">
+            <div class="inner">
+                <h3 id="kpi-pending-alerts">0</h3>
+                <p>Cảnh báo chờ xử lý</p>
+            </div>
+            <div class="icon">
+                <i class="fas fa-exclamation-triangle"></i>
+            </div>
+            <a href="{{ url_for('main.alerts') }}" class="small-box-footer">
+                Duyệt cảnh báo <i class="fas fa-arrow-circle-right"></i>
+            </a>
+        </div>
+    </div>
+
+    <!-- KPI 4: Uptime hệ thống -->
+    <div class="col-lg-3 col-6">
+        <div class="small-box bg-warning">
+            <div class="inner">
+                <h3 id="kpi-system-time">--:--:--</h3>
+                <p>Thời gian hệ thống</p>
+            </div>
+            <div class="icon">
+                <i class="fas fa-clock"></i>
+            </div>
+            {% if current_user.role == 'admin' %}
+            <a href="{{ url_for('main.settings') }}" class="small-box-footer">
+                Cấu hình <i class="fas fa-arrow-circle-right"></i>
+            </a>
+            {% else %}
+            <div class="small-box-footer" style="cursor: default;">
+                <i class="fas fa-minus"></i>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <!-- Cột trái: Tình trạng dịch vụ & Thông tin hệ thống -->
+    <div class="col-md-6">
+        <!-- Tình trạng dịch vụ -->
+        <div class="card card-outline card-navy">
+            <div class="card-header">
+                <h3 class="card-title font-weight-bold">
+                    <i class="fas fa-heartbeat text-danger mr-1"></i> Tình trạng dịch vụ
+                </h3>
+            </div>
+            <div class="card-body p-0">
+                <table class="table table-striped table-valign-middle">
+                    <thead>
+                        <tr>
+                            <th>Dịch vụ</th>
+                            <th>Trạng thái</th>
+                            <th>Chi tiết</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>
+                                <i class="fas fa-camera text-secondary mr-2"></i> Camera Feed
+                            </td>
+                            <td>
+                                <span class="badge" id="srv-cam-badge">Đang kiểm tra</span>
+                            </td>
+                            <td id="srv-cam-detail">--</td>
+                        </tr>
+                        <tr>
+                            <td>
+                                <i class="fas fa-brain text-secondary mr-2"></i> AI Inference
+                            </td>
+                            <td>
+                                <span class="badge" id="srv-ai-badge">Đang kiểm tra</span>
+                            </td>
+                            <td id="srv-ai-detail">--</td>
+                        </tr>
+                        <tr>
+                            <td>
+                                <i class="fas fa-microchip text-secondary mr-2"></i> ESP32 IoT Node
+                            </td>
+                            <td>
+                                <span class="badge" id="srv-iot-badge">Đang kiểm tra</span>
+                            </td>
+                            <td id="srv-iot-detail">--</td>
+                        </tr>
+                        <tr>
+                            <td>
+                                <i class="fas fa-database text-secondary mr-2"></i> SQLite Database
+                            </td>
+                            <td>
+                                <span class="badge badge-success">Ổn định</span>
+                            </td>
+                            <td>Kết nối OK</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Thông tin hệ thống -->
+        <div class="card card-outline card-primary">
+            <div class="card-header">
+                <h3 class="card-title font-weight-bold">
+                    <i class="fas fa-info-circle text-primary mr-1"></i> Thông tin hệ thống
+                </h3>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-6">
+                        <strong>Nguồn video:</strong>
+                        <p class="text-muted" id="sys-video-source">Webcam #0</p>
+                    </div>
+                    <div class="col-6">
+                        <strong>Người đang đăng nhập:</strong>
+                        <p class="text-muted">
+                            {{ current_user.display_name or current_user.username }}
+                            <span class="badge badge-secondary ml-1">{{ current_user.role }}</span>
+                        </p>
+                    </div>
+                </div>
+
+        <!-- Cảm biến môi trường IoT -->
+        <div class="card card-outline card-warning">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h3 class="card-title font-weight-bold mb-0">
+                    <i class="fas fa-thermometer-half text-warning mr-1"></i> Cảm biến Môi trường IoT
+                </h3>
+                <span class="badge badge-success float-right" id="env-status-tag">ESP32 Normal</span>
+            </div>
+            <div class="card-body">
+                <div class="row text-center">
+                    <div class="col-3 border-right">
+                        <small class="text-muted d-block">Nhiệt độ</small>
+                        <h4 class="font-weight-bold text-danger mb-0" id="env-temp">28.5°C</h4>
+                    </div>
+                    <div class="col-3 border-right">
+                        <small class="text-muted d-block">Độ ẩm</small>
+                        <h4 class="font-weight-bold text-info mb-0" id="env-humidity">65%</h4>
+                    </div>
+                    <div class="col-3 border-right">
+                        <small class="text-muted d-block">Cảm biến Khói</small>
+                        <h4 class="font-weight-bold text-success mb-0" id="env-smoke">An toàn</h4>
+                    </div>
+                    <div class="col-3">
+                        <small class="text-muted d-block">Trạng thái Cửa</small>
+                        <h4 class="font-weight-bold text-secondary mb-0" id="env-door">Đóng</h4>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Hiệu năng Phần cứng Realtime -->
+        <div class="card card-outline card-info">
+            <div class="card-header">
+                <h3 class="card-title font-weight-bold">
+                    <i class="fas fa-microchip text-info mr-1"></i> Hiệu năng Phần cứng (System Metrics)
+                </h3>
+            </div>
+            <div class="card-body p-3">
+                <div class="mb-2">
+                    <div class="d-flex justify-content-between text-sm">
+                        <span>CPU Usage (<span id="sys-cpu-cores">--</span> Cores)</span>
+                        <strong id="sys-cpu-val">--%</strong>
+                    </div>
+                    <div class="progress progress-xs">
+                        <div class="progress-bar bg-primary" id="sys-cpu-bar" style="width: 0%"></div>
+                    </div>
+                </div>
+                <div class="mb-2">
+                    <div class="d-flex justify-content-between text-sm">
+                        <span>RAM System Usage</span>
+                        <strong id="sys-ram-val">--%</strong>
+                    </div>
+                    <div class="progress progress-xs">
+                        <div class="progress-bar bg-info" id="sys-ram-bar" style="width: 0%"></div>
+                    </div>
+                </div>
+                <div class="mb-2">
+                    <div class="d-flex justify-content-between text-sm">
+                        <span>Disk Usage</span>
+                        <strong id="sys-disk-val">--%</strong>
+                    </div>
+                    <div class="progress progress-xs">
+                        <div class="progress-bar bg-warning" id="sys-disk-bar" style="width: 0%"></div>
+                    </div>
+                </div>
+                <div class="row mt-3 text-center text-xs text-muted">
+                    <div class="col-6">Python Memory: <strong class="text-dark" id="sys-proc-mem">-- MB</strong></div>
+                    <div class="col-6">Active Threads: <strong class="text-dark" id="sys-proc-threads">--</strong></div>
+                </div>
+            </div>
+        </div>
+                <hr>
+                <div class="row">
+                    <div class="col-6">
+                        <strong>Độ tin cậy hiện tại (AI):</strong>
+                        <p class="text-muted" id="sys-ai-conf">--%</p>
+                    </div>
+                    <div class="col-6">
+                        <strong>Tư thế hiện tại (AI):</strong>
+                        <p class="text-muted font-weight-bold" id="sys-ai-pose">--</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Cột phải: Xem nhanh camera -->
+    <div class="col-md-6">
+        <div class="card card-outline card-navy">
+            <div class="card-header d-flex p-0">
+                <h3 class="card-title p-3 font-weight-bold">
+                    <i class="fas fa-eye text-navy mr-1"></i> Xem nhanh Camera
+                </h3>
+                <ul class="nav nav-pills ml-auto p-2">
+                    <li class="nav-item">
+                        <a class="nav-link active btn-sm" href="{{ url_for('main.monitor') }}">
+                            <i class="fas fa-expand-arrows-alt"></i> Giám sát toàn màn hình
+                        </a>
+                    </li>
+                </ul>
+            </div>
+            <div class="card-body p-0 text-center bg-dark">
+                <div class="position-relative" style="min-height: 250px;">
+                    <img src="{{ url_for('main.video_feed', camera_id=1) }}"
+                         alt="Camera Stream"
+                         class="img-fluid"
+                         id="dashboard-video-feed"
+                         style="max-height: 450px; object-fit: contain; width: 100%;">
+                </div>
+            </div>
+            <div class="card-footer text-muted text-sm d-flex justify-content-between">
+                <span><i class="fas fa-circle text-success mr-1"></i> LIVE Stream</span>
+                <span id="cam-footer-fps">-- fps</span>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    const POSE_LABELS_VN = {
+        'Dung':            'Đứng',
+        'Ngoi':            'Ngồi',
+        'Cui nguoi':       'Cúi người',
+        'Quy':             'Quỳ',
+        'Khong phat hien': 'Chưa phát hiện',
+        'AI off':          'AI đã tắt',
+    };
+
+    function updateDashboardData() {
+        // Lấy camera đầu tiên từ DB, hoặc dùng ID cứng là 1
+        const cameraId = window._dashboardCamId || 1;
+        $.ajax({
+            url: '/camera_status/' + cameraId,
+            method: 'GET',
+            success: function(data) {
+                const online = data.is_online;
+
+                // KPI 2: Trạng thái Camera
+                var camKpi = $('#kpi-cam-status');
+                var camKpiBox = camKpi.closest('.small-box');
+                if (online) {
+                    camKpi.text('ONLINE');
+                    camKpiBox.removeClass('bg-danger').addClass('bg-success');
+                    $('#kpi-fps-text').text('Camera hoạt động @ ' + data.fps + ' fps');
+                } else {
+                    camKpi.text('OFFLINE');
+                    camKpiBox.removeClass('bg-success').addClass('bg-danger');
+                    $('#kpi-fps-text').text('Camera mất tín hiệu');
+                }
+
+                // KPI 4: Thời gian hệ thống
+                $('#kpi-system-time').text(data.timestamp.split(' ')[1] || data.timestamp);
+
+                // Thông tin hệ thống
+                $('#sys-video-source').text(data.source_name);
+                $('#cam-footer-fps').text(data.fps + ' fps');
+
+                // Bảng tình trạng dịch vụ
+                var camBadge = $('#srv-cam-badge');
+                if (online) {
+                    camBadge.attr('class', 'badge badge-success').text('Hoạt động');
+                    $('#srv-cam-detail').text('Stream OK (' + data.fps + ' fps)');
+                } else {
+                    camBadge.attr('class', 'badge badge-danger').text('Ngoại tuyến');
+                    $('#srv-cam-detail').text('Mất tín hiệu camera');
+                }
+
+                // AI status
+                var aiBadge = $('#srv-ai-badge');
+                if (data.pose_enabled) {
+                    aiBadge.attr('class', 'badge badge-success').text('Hoạt động');
+                    $('#srv-ai-detail').text('Đang suy luận (MediaPipe)');
+                } else {
+                    aiBadge.attr('class', 'badge badge-secondary').text('Tạm dừng');
+                    $('#srv-ai-detail').text('Đã tắt nhận diện tư thế');
+                }
+
+                // AI Pose labels
+                if (data.pose) {
+                    const poseKey = data.pose.pose;
+                    const vnLabel = POSE_LABELS_VN[poseKey] || poseKey;
+                    const conf = data.pose.confidence || 0;
+
+                    $('#sys-ai-pose').text(vnLabel);
+                    $('#sys-ai-conf').text(conf + '%');
+
+                    // Nếu có người thì hiện số người, tạm thời mock 1 người nếu detect thành công
+                    if (data.pose.is_detected) {
+                        $('#kpi-person-count').text('1');
+                        $('#sys-ai-pose').css('color', '#28a745');
+                    } else {
+                        $('#kpi-person-count').text('0');
+                        $('#sys-ai-pose').css('color', '#6c757d');
+                    }
+                } else {
+                    $('#sys-ai-pose').text('Chưa phát hiện');
+                    $('#sys-ai-conf').text('--%');
+                    $('#kpi-person-count').text('0');
+                }
+            },
+            error: function() {
+                var camKpi = $('#kpi-cam-status');
+                var camKpiBox = camKpi.closest('.small-box');
+                camKpi.text('LỖI KẾT NỐI');
+                camKpiBox.removeClass('bg-success bg-danger').addClass('bg-secondary');
+                $('#kpi-fps-text').text('Mất kết nối server');
+
+                $('#srv-cam-badge').attr('class', 'badge badge-secondary').text('Lỗi kết nối');
+                $('#srv-cam-detail').text('Không thể tải trạng thái');
+                $('#srv-ai-badge').attr('class', 'badge badge-secondary').text('Lỗi kết nối');
+                $('#srv-ai-detail').text('Không thể tải trạng thái');
+            }
+        });
+
+        // Đếm số lượng event pending từ API và cập nhật KPI 3
+        $.ajax({
+            url: '/api/events/count',
+            method: 'GET',
+            success: function(data) {
+                $('#kpi-pending-alerts').text(data.new || 0);
+            },
+            error: function() {
+                $('#kpi-pending-alerts').text('?');
+            }
+        });
+
+        // Fetch IoT status & environmental sensors
+        $.ajax({
+            url: '/api/iot/status',
+            method: 'GET',
+            success: function(data) {
+                var iotBadge = $('#srv-iot-badge');
+                if (data.is_online) {
+                    iotBadge.attr('class', 'badge badge-success').text('Hoạt động');
+                    $('#srv-iot-detail').text('Heartbeat OK (IP: ' + (data.ip || 'Local') + ')');
+                } else {
+                    iotBadge.attr('class', 'badge badge-danger').text('Ngoại tuyến');
+                    $('#srv-iot-detail').text('ESP32 Offline');
+                }
+
+                if (data.sensors) {
+                    $('#env-temp').text(data.sensors.temperature.toFixed(1) + '°C');
+                    $('#env-humidity').text(data.sensors.humidity.toFixed(0) + '%');
+                    
+                    if (data.sensors.smoke === 1) {
+                        $('#env-smoke').html('<span class="text-danger"><i class="fas fa-fire mr-1"></i>PHÁT HIỆN KHÓI!</span>');
+                        $('#env-status-tag').attr('class', 'badge badge-danger').text('ALARM: KHÓI/CHÁY');
+                    } else {
+                        $('#env-smoke').html('<span class="text-success">An toàn</span>');
+                        $('#env-status-tag').attr('class', 'badge badge-success').text('ESP32 Normal');
+                    }
+                    
+                    $('#env-door').text(data.sensors.door_closed === 1 ? 'Đóng' : 'MỞ CỬA');
+                }
+            }
+        });
+
+        // Fetch Hardware System Metrics
+        $.ajax({
+            url: '/api/settings/metrics',
+            method: 'GET',
+            success: function(m) {
+                if (!m) return;
+                $('#sys-cpu-cores').text(m.cpu.cores);
+                $('#sys-cpu-val').text(m.cpu.percent + '%');
+                $('#sys-cpu-bar').css('width', m.cpu.percent + '%');
+
+                $('#sys-ram-val').text(m.ram.percent + '% (' + m.ram.used_gb + '/' + m.ram.total_gb + ' GB)');
+                $('#sys-ram-bar').css('width', m.ram.percent + '%');
+
+                $('#sys-disk-val').text(m.disk.percent + '% (' + m.disk.used_gb + '/' + m.disk.total_gb + ' GB)');
+                $('#sys-disk-bar').css('width', m.disk.percent + '%');
+
+                $('#sys-proc-mem').text(m.process.memory_mb + ' MB');
+                $('#sys-proc-threads').text(m.process.active_threads);
+            }
+        });
+    }
+
+    $(document).ready(function() {
+        // Khởi tạo: lấy camera đầu tiên
+        $.ajax({
+            url: '/api/cameras',
+            method: 'GET',
+            success: function(cameras) {
+                if (cameras && cameras.length > 0) {
+                    window._dashboardCamId = cameras[0].id;
+                }
+                updateDashboardData();
+                setInterval(updateDashboardData, 2000);
+            },
+            error: function() {
+                updateDashboardData();
+                setInterval(updateDashboardData, 2000);
+            }
+        });
+    });
+</script>
+{% endblock %}

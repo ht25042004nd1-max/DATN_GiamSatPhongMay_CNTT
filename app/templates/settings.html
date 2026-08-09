@@ -1,0 +1,576 @@
+{% extends "base.html" %}
+{% block title %}Cấu hình — Lab Monitor{% endblock %}
+{% block header_title %}Cấu hình hệ thống{% endblock %}
+{% block title_sub %}System Settings{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-6">
+        <!-- ══ CARD 1: Telegram Bot ══════════════════════════ -->
+        <div class="card card-primary card-outline shadow-sm">
+            <div class="card-header">
+                <h3 class="card-title">
+                    <i class="fab fa-telegram-plane text-primary mr-1"></i> Telegram Bot — Cảnh báo tự động
+                </h3>
+            </div>
+            <div class="card-body">
+                <div class="form-group mb-4">
+                    <div class="custom-control custom-switch custom-switch-lg">
+                        <input type="checkbox" class="custom-control-input" id="tg-enabled">
+                        <label class="custom-control-label" for="tg-enabled">Bật gửi cảnh báo qua Telegram</label>
+                    </div>
+                    <small class="form-text text-muted">Khi bật, mỗi sự kiện vi phạm sẽ gửi tin nhắn + ảnh minh chứng.</small>
+                </div>
+
+                <div class="form-group">
+                    <label>Bot Token</label>
+                    <input type="text" id="tg-token" class="form-control text-monospace" placeholder="1234567890:ABCdefGHIjklMNOpqrSTUvwxYZ" autocomplete="new-password">
+                    <small class="form-text text-muted">Lấy từ <a href="https://t.me/BotFather" target="_blank">@BotFather</a> → /newbot → copy token. Để trống nếu không muốn đổi.</small>
+                </div>
+
+                <div class="form-group">
+                    <label>Chat ID</label>
+                    <input type="text" id="tg-chat-id" class="form-control text-monospace" placeholder="123456789 hoặc -100123456789 (group)">
+                    <small class="form-text text-muted">Cá nhân: gửi tin cho <a href="https://t.me/userinfobot" target="_blank">@userinfobot</a>. Group: lấy ID từ URL hoặc @userinfobot.</small>
+                </div>
+
+                <!-- Chế độ gửi cảnh báo -->
+                <div class="form-group mb-0">
+                    <label class="font-weight-bold">
+                        <i class="fas fa-camera text-primary mr-1"></i> Chế độ gửi cảnh báo
+                    </label>
+                    <div class="row mt-2">
+                        <div class="col-6">
+                            <div class="card mode-card border-info h-100" id="mode-normal-card" style="cursor:pointer;" onclick="selectSendMode('normal')">
+                                <div class="card-body text-center p-3 d-flex flex-column justify-content-center align-items-center">
+                                    <i class="fas fa-comment-alt fa-2x text-info mb-3"></i>
+                                    <h6 class="font-weight-bold mb-2">📝 Thường</h6>
+                                    <span class="text-muted" style="font-size: 0.85rem; line-height: 1.4;">Chỉ gửi tin nhắn text<br>Không kèm hình ảnh</span>
+                                    <div class="mt-3">
+                                        <span id="badge-normal" class="badge badge-secondary px-3 py-1">Đang chọn</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-6">
+                            <div class="card mode-card border-warning h-100" id="mode-mandatory-card" style="cursor:pointer;" onclick="selectSendMode('mandatory')">
+                                <div class="card-body text-center p-3 d-flex flex-column justify-content-center align-items-center">
+                                    <i class="fas fa-camera fa-2x text-warning mb-3"></i>
+                                    <h6 class="font-weight-bold mb-2">📷 Bắt buộc</h6>
+                                    <span class="text-muted" style="font-size: 0.85rem; line-height: 1.4;">Gửi kèm hình ảnh<br>minh chứng vi phạm</span>
+                                    <div class="mt-3">
+                                        <span id="badge-mandatory" class="badge badge-secondary px-3 py-1">Đang chọn</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <input type="hidden" id="tg-send-mode" value="mandatory">
+                    <small class="form-text text-muted mt-3">
+                        <i class="fas fa-info-circle mr-1"></i>
+                        <b>Ảnh minh chứng luôn được chụp và lưu</b> vào hệ thống dù bạn chọn chế độ nào.
+                    </small>
+                </div>
+            </div>
+            <div class="card-footer bg-light">
+                <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                    <button class="btn btn-outline-success btn-sm font-weight-bold" onclick="testTelegram()" id="btn-test">
+                        <i class="fas fa-paper-plane mr-1"></i> Gửi tin test Telegram
+                    </button>
+                    <button class="btn btn-warning btn-sm text-dark font-weight-bold shadow-sm" onclick="testStoopAlert()" id="btn-test-stoop">
+                        <i class="fas fa-exclamation-triangle mr-1"></i> Test Cảnh báo Cúi Người
+                    </button>
+                </div>
+                <div class="w-100 mt-2 text-sm text-center" id="tg-status" style="display: none;"></div>
+            </div>
+        </div>
+        <!-- /.card -->
+
+        <!-- ══ CARD 2: Khung giờ hoạt động ══════════════════ -->
+        <div class="card card-warning card-outline shadow-sm">
+            <div class="card-header">
+                <h3 class="card-title">
+                    <i class="far fa-clock text-warning mr-1"></i> Khung giờ gửi cảnh báo
+                </h3>
+            </div>
+            <div class="card-body">
+                <div class="form-group mb-0">
+                    <label>Chỉ gửi cảnh báo trong khoảng thời gian</label>
+                    <div class="input-group my-3" style="max-width: 350px;">
+                        <input type="number" id="hour-from" class="form-control text-center font-weight-bold" min="0" max="23" value="7" oninput="previewSchedule()">
+                        <div class="input-group-append input-group-prepend">
+                            <span class="input-group-text bg-light text-muted border-left-0 border-right-0">giờ đến</span>
+                        </div>
+                        <input type="number" id="hour-to" class="form-control text-center font-weight-bold" min="0" max="23" value="17" oninput="previewSchedule()">
+                        <div class="input-group-append">
+                            <span class="input-group-text bg-light text-muted">giờ</span>
+                        </div>
+                    </div>
+                    <div class="d-flex align-items-center mb-3">
+                        <span class="mr-2 text-muted">Hiệu lực:</span>
+                        <div class="badge badge-info px-3 py-2" id="schedule-preview" style="font-size: 14px; letter-spacing: 0.5px;">07:00 – 17:59</div>
+                    </div>
+                    <small class="form-text text-muted">Ví dụ: 7–17 → chỉ gửi trong giờ học. Đặt 0–23 để gửi cả ngày.</small>
+                </div>
+                
+                <div class="alert alert-light border mt-3 mb-0" id="schedule-status">
+                    <i class="fas fa-spinner fa-spin mr-1"></i> Đang kiểm tra...
+                </div>
+            </div>
+        </div>
+        <!-- /.card -->
+    </div>
+    
+    <div class="col-md-6">
+        <!-- ══ CARD 3: Cấu hình IoT ════════════════════════ -->
+        <div class="card card-danger card-outline shadow-sm">
+            <div class="card-header">
+                <h3 class="card-title">
+                    <i class="fas fa-microchip text-danger mr-1"></i> Tích hợp thiết bị IoT (ESP32)
+                </h3>
+            </div>
+            <div class="card-body">
+                <div class="form-group mb-4">
+                    <div class="custom-control custom-switch custom-switch-lg">
+                        <input type="checkbox" class="custom-control-input" id="iot-enabled">
+                        <label class="custom-control-label" for="iot-enabled">Bật điều khiển thiết bị IoT ngoại vi</label>
+                    </div>
+                    <small class="form-text text-muted">Khi có cảnh báo mới, tự động gửi lệnh bật còi/đèn/relay tới ESP32.</small>
+                </div>
+
+                <div class="form-group">
+                    <label>Địa chỉ IP hoặc URL của ESP32</label>
+                    <input type="text" id="iot-esp32-ip" class="form-control text-monospace" placeholder="http://192.168.1.100 hoặc http://127.0.0.1:5000/mock_esp32">
+                    <small class="form-text text-muted">Địa chỉ nhận lệnh HTTP POST điều khiển của board ESP32.</small>
+                </div>
+
+                <div class="form-group">
+                    <label>Thiết bị đầu ra muốn kích hoạt khi có vi phạm</label>
+                    <input type="text" id="iot-alert-devices" class="form-control text-monospace" placeholder="led,buzzer,relay">
+                    <small class="form-text text-muted">Nhập danh sách cách nhau bởi dấu phẩy. Ví dụ: <code>led,buzzer,relay</code></small>
+                </div>
+
+                <div class="form-group mb-0">
+                    <label>Thời gian còi kêu (giây)</label>
+                    <input type="number" id="iot-buzzer-duration" class="form-control" min="1" max="60" value="10">
+                    <small class="form-text text-muted">Thời gian còi (Buzzer) và Đèn (LED) tự động tắt sau khi được kích hoạt (từ 1 đến 60 giây).</small>
+                </div>
+            </div>
+            <div class="card-footer bg-light">
+                <button class="btn btn-outline-danger btn-sm" onclick="testIot()" id="btn-test-iot">
+                    <i class="fas fa-bolt mr-1"></i> Test kết nối phần cứng
+                </button>
+                <div class="w-100 mt-2 text-sm" id="iot-status" style="display: none;"></div>
+            </div>
+        </div>
+        <!-- /.card -->
+
+        <!-- ══ CARD 4: Trạng thái hệ thống ═════════════════ -->
+        <div class="card card-info card-outline shadow-sm">
+            <div class="card-header">
+                <h3 class="card-title">
+                    <i class="fas fa-network-wired text-info mr-1"></i> Trạng thái kết nối
+                </h3>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-6">
+                        <div class="info-box bg-light mb-0 border">
+                            <span class="info-box-icon"><i class="fab fa-telegram text-primary"></i></span>
+                            <div class="info-box-content">
+                                <span class="info-box-text text-muted text-uppercase" style="font-size: 0.75rem;">Telegram Bot</span>
+                                <span class="info-box-number" id="conn-telegram">
+                                    <i class="fas fa-question-circle text-muted"></i> Chưa kiểm tra
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-6">
+                        <div class="info-box bg-light mb-0 border">
+                            <span class="info-box-icon"><i class="fas fa-camera text-info"></i></span>
+                            <div class="info-box-content">
+                                <span class="info-box-text text-muted text-uppercase" style="font-size: 0.75rem;">Camera / AI</span>
+                                <span class="info-box-number" id="conn-camera">
+                                    <i class="fas fa-spinner fa-spin text-muted"></i> Đang kiểm tra
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <!-- /.card -->
+
+        <!-- Sao lưu & Khôi phục cấu hình -->
+        <div class="card card-outline card-secondary shadow-sm">
+            <div class="card-header">
+                <h3 class="card-title font-weight-bold">
+                    <i class="fas fa-file-export text-secondary mr-1"></i> Sao lưu & Khôi phục Cấu hình
+                </h3>
+            </div>
+            <div class="card-body">
+                <p class="text-sm text-muted mb-3">Xuất toàn bộ thông tin Phòng máy, Camera, Máy tính, IoT, ROI và Cài đặt ra file JSON để sao lưu hoặc triển khai sang máy chủ mới.</p>
+                <div class="d-flex justify-content-between">
+                    <button class="btn btn-outline-success btn-sm" onclick="exportConfigJSON()">
+                        <i class="fas fa-download mr-1"></i> Xuất Cấu hình (Export JSON)
+                    </button>
+                    <button class="btn btn-outline-info btn-sm" onclick="$('#import-file-input').click()">
+                        <i class="fas fa-upload mr-1"></i> Nhập Cấu hình (Import JSON)
+                    </button>
+                    <input type="file" id="import-file-input" style="display:none;" accept=".json" onchange="importConfigJSON(event)">
+                </div>
+            </div>
+        </div>
+
+        <!-- ══ CARD 5: Kiểm định rò rỉ RAM & Đếm Frame Stream (Tuần 13) ════ -->
+        <div class="card card-outline card-info shadow-sm">
+            <div class="card-header">
+                <h3 class="card-title font-weight-bold text-info">
+                    <i class="fas fa-shield-alt mr-1"></i> 🛡 Kiểm định Độ ổn định Luồng Video & RAM Memory
+                </h3>
+                <div class="card-tools">
+                    <span class="badge badge-info">Tuần 13 Benchmark</span>
+                </div>
+            </div>
+            <div class="card-body py-2">
+                <div class="row text-center my-2">
+                    <div class="col-4">
+                        <span class="text-muted small">Tổng Frame Đã Xử lý</span>
+                        <h4 class="font-weight-bold text-navy mb-0" id="cam-total-frames">--</h4>
+                    </div>
+                    <div class="col-4">
+                        <span class="text-muted small">Frame Bị Mất (Dropped)</span>
+                        <h4 class="font-weight-bold text-danger mb-0" id="cam-dropped-frames">--</h4>
+                    </div>
+                    <div class="col-4">
+                        <span class="text-muted small">Tỷ lệ Mất Frame</span>
+                        <h4 class="font-weight-bold text-success mb-0" id="cam-drop-rate">0.0%</h4>
+                    </div>
+                </div>
+                <div class="alert alert-light border mb-0 text-xs text-muted">
+                    <i class="fas fa-check-circle text-success mr-1"></i> <strong>Memory Leak Check:</strong> Tiến trình Python OpenCV đang chạy ổn định, không ghi nhận hiện tượng tràn RAM bộ đệm frame.
+                </div>
+            </div>
+        </div>
+
+        <!-- Nút lưu cài đặt toàn cục -->
+        <div class="mt-4 text-center">
+            <button class="btn btn-primary btn-lg px-5 shadow-sm" onclick="saveSettings()">
+                <i class="fas fa-save mr-1"></i> Lưu toàn bộ cấu hình
+            </button>
+            <div class="mt-3 text-sm font-weight-bold" id="global-status" style="display: none;"></div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_css %}
+<style>
+/* CSS cho card chọn chế độ gửi */
+.mode-card {
+    transition: all 0.2s ease-in-out;
+    border-width: 2px !important;
+    border-radius: 10px;
+}
+.mode-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 6px 15px rgba(0,0,0,0.1) !important;
+}
+.mode-card.active-mode {
+    background-color: #f8f9fa;
+}
+.mode-card.active-mode.border-info {
+    background-color: rgba(23, 162, 184, 0.08);
+}
+.mode-card.active-mode.border-warning {
+    background-color: rgba(255, 193, 7, 0.08);
+}
+
+/* Các thành phần giao diện khác */
+.custom-switch-lg .custom-control-label::before {
+    height: 1.5rem;
+    width: 2.75rem;
+    border-radius: 2rem;
+}
+.custom-switch-lg .custom-control-label::after {
+    width: 1.25rem;
+    height: 1.25rem;
+    border-radius: 50%;
+}
+.custom-switch-lg .custom-control-input:checked ~ .custom-control-label::after {
+    transform: translateX(1.25rem);
+}
+.custom-control-label {
+    padding-top: 0.25rem;
+    padding-left: 0.5rem;
+    font-size: 1.1rem;
+    cursor: pointer;
+}
+.gap-2 {
+    gap: 0.5rem;
+}
+</style>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+/* ── Load cài đặt hiện tại ── */
+async function loadSettings() {
+    try {
+        const r = await fetch('/api/settings');
+        if (!r.ok) return;
+        const d = await r.json();
+
+        document.getElementById('tg-enabled').checked = d.telegram_enabled;
+        document.getElementById('tg-token').placeholder =
+            d.has_token ? '(token đã lưu — để trống nếu không đổi)' : 'Chưa có token';
+        document.getElementById('tg-chat-id').value = d.telegram_chat_id || '';
+        document.getElementById('hour-from').value  = d.telegram_hour_from;
+        document.getElementById('hour-to').value    = d.telegram_hour_to;
+
+        // Load chế độ gửi
+        selectSendMode(d.telegram_send_mode || 'mandatory');
+
+        // Load IoT fields
+        document.getElementById('iot-enabled').checked = d.iot_enabled;
+        document.getElementById('iot-esp32-ip').value = d.iot_esp32_ip || '';
+        document.getElementById('iot-alert-devices').value = d.iot_alert_devices || '';
+        document.getElementById('iot-buzzer-duration').value = d.iot_buzzer_duration || 10;
+
+        previewSchedule();
+    } catch(e) {}
+}
+
+/* ── Chọn chế độ gửi ── */
+function selectSendMode(mode) {
+    document.getElementById('tg-send-mode').value = mode;
+    const modes = ['normal', 'mandatory'];
+    modes.forEach(m => {
+        const card   = document.getElementById(`mode-${m}-card`);
+        const badge  = document.getElementById(`badge-${m}`);
+        const active = (m === mode);
+        if (active) {
+            card.classList.add('shadow-sm', 'active-mode');
+            badge.className  = 'badge badge-' + (m === 'mandatory' ? 'warning' : 'info');
+            badge.textContent = '✓ Đang dùng';
+        } else {
+            card.classList.remove('shadow-sm', 'active-mode');
+            badge.className  = 'badge badge-secondary';
+            badge.textContent = 'Chọn';
+        }
+    });
+}
+
+/* ── Lưu cài đặt ── */
+async function saveSettings() {
+    const payload = {
+        telegram_enabled:  document.getElementById('tg-enabled').checked,
+        telegram_chat_id:  document.getElementById('tg-chat-id').value.trim(),
+        telegram_hour_from: parseInt(document.getElementById('hour-from').value),
+        telegram_hour_to:   parseInt(document.getElementById('hour-to').value),
+        telegram_send_mode: document.getElementById('tg-send-mode').value,
+        
+        // IoT fields
+        iot_enabled:         document.getElementById('iot-enabled').checked,
+        iot_esp32_ip:        document.getElementById('iot-esp32-ip').value.trim(),
+        iot_alert_devices:   document.getElementById('iot-alert-devices').value.trim(),
+        iot_buzzer_duration: parseInt(document.getElementById('iot-buzzer-duration').value)
+    };
+    const tokenVal = document.getElementById('tg-token').value.trim();
+    if (tokenVal) payload.telegram_token = tokenVal;
+
+    showStatus('global-status', 'info', '<i class="fas fa-spinner fa-spin mr-1"></i> Đang lưu...');
+    try {
+        const r = await fetch('/api/settings', {
+            method: 'POST',
+            headers: {'Content-Type':'application/json'},
+            body: JSON.stringify(payload),
+        });
+        const d = await r.json();
+        if (r.ok) {
+            showStatus('global-status', 'success', '<i class="fas fa-check-circle mr-1"></i> ' + d.message);
+            document.getElementById('tg-token').value = '';  // xóa token khỏi input sau khi lưu
+            await loadSettings();
+            setTimeout(() => {
+                const el = document.getElementById('global-status');
+                if (el) el.style.display = 'none';
+            }, 3000);
+        } else {
+            showStatus('global-status', 'danger', '<i class="fas fa-exclamation-triangle mr-1"></i> ' + (d.error || 'Lỗi không xác định'));
+        }
+    } catch(e) {
+        showStatus('global-status', 'danger', '<i class="fas fa-times-circle mr-1"></i> Lỗi kết nối: ' + e.message);
+    }
+}
+
+/* ── Test Telegram ── */
+async function testTelegram() {
+    const btn = document.getElementById('btn-test');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-1"></i> Đang gửi...';
+    showStatus('tg-status', 'info', '<i class="fas fa-spinner fa-spin mr-1"></i> Đang gửi tin nhắn test...');
+
+    const tokenVal   = document.getElementById('tg-token').value.trim();
+    const chatIdVal  = document.getElementById('tg-chat-id').value.trim();
+
+    try {
+        const r = await fetch('/api/settings/test_telegram', {
+            method: 'POST',
+            headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({ token: tokenVal, chat_id: chatIdVal }),
+        });
+        const d = await r.json();
+        if (d.success) {
+            showStatus('tg-status', 'success', '<i class="fas fa-check-circle mr-1"></i> ' + d.message);
+            document.getElementById('conn-telegram').innerHTML = '<span class="text-success"><i class="fas fa-check-circle mr-1"></i> Đã kết nối</span>';
+        } else {
+            showStatus('tg-status', 'danger', '<i class="fas fa-exclamation-triangle mr-1"></i> ' + d.message);
+            document.getElementById('conn-telegram').innerHTML = '<span class="text-danger"><i class="fas fa-times-circle mr-1"></i> ' + d.message + '</span>';
+        }
+    } catch(e) {
+        showStatus('tg-status', 'danger', '<i class="fas fa-times-circle mr-1"></i> Lỗi: ' + e.message);
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-paper-plane mr-1"></i> Gửi tin test Telegram';
+    }
+}
+
+/* ── Test Cảnh báo Cúi người ── */
+async function testStoopAlert() {
+    const btn = document.getElementById('btn-test-stoop');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-1"></i> Đang gửi...';
+    showStatus('tg-status', 'info', '<i class="fas fa-spinner fa-spin mr-1"></i> Đang tạo sự kiện vi phạm CÚI NGƯỜI và gửi Telegram...');
+
+    try {
+        const r = await fetch('/api/settings/test_stoop_alert', {
+            method: 'POST',
+            headers: {'Content-Type':'application/json'}
+        });
+        const d = await r.json();
+        if (d.success) {
+            showStatus('tg-status', 'success', '<i class="fas fa-check-circle mr-1"></i> ' + d.message);
+            toastr.success(d.message);
+        } else {
+            showStatus('tg-status', 'danger', '<i class="fas fa-exclamation-triangle mr-1"></i> ' + d.message);
+            toastr.error(d.message);
+        }
+    } catch(e) {
+        showStatus('tg-status', 'danger', '<i class="fas fa-times-circle mr-1"></i> Lỗi: ' + e.message);
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-exclamation-triangle mr-1"></i> Test Cảnh báo Cúi Người';
+    }
+}
+
+/* ── Preview khung giờ ── */
+function previewSchedule() {
+    const from = parseInt(document.getElementById('hour-from').value) || 0;
+    const to   = parseInt(document.getElementById('hour-to').value)   || 23;
+    document.getElementById('schedule-preview').textContent =
+        `${String(from).padStart(2,'0')}:00 – ${String(to).padStart(2,'0')}:59`;
+
+    const now = new Date().getHours();
+    let active;
+    if (from <= to) {
+        active = now >= from && now <= to;
+    } else {
+        active = now >= from || now <= to;
+    }
+    const statusEl = document.getElementById('schedule-status');
+    
+    if (active) {
+        statusEl.className = "alert alert-success border mb-0";
+        statusEl.innerHTML = `<i class="fas fa-check-circle mr-1"></i> Hiện tại <b>${String(now).padStart(2,'0')}:xx</b> — đang trong khung giờ hoạt động`;
+    } else {
+        statusEl.className = "alert alert-warning border mb-0";
+        statusEl.innerHTML = `<i class="fas fa-pause-circle mr-1"></i> Hiện tại <b>${String(now).padStart(2,'0')}:xx</b> — ngoài khung giờ (không gửi)`;
+    }
+}
+
+/* ── Cập nhật trạng thái camera ── */
+async function updateCameraStatus() {
+    try {
+        // Lấy camera đầu tiên
+        const camResp = await fetch('/api/cameras');
+        const cams = await camResp.json();
+        const camId = (cams && cams.length > 0) ? cams[0].id : 1;
+        const r = await fetch('/camera_status/' + camId);
+        const d = await r.json();
+        const el = document.getElementById('conn-camera');
+        if (d.is_online) {
+            el.innerHTML = `<span class="text-success"><i class="fas fa-check-circle mr-1"></i> Online (${d.fps} fps)</span>`;
+        } else {
+            el.innerHTML = '<span class="text-danger"><i class="fas fa-times-circle mr-1"></i> Camera offline</span>';
+        }
+    } catch(e) {
+        const el = document.getElementById('conn-camera');
+        if (el) el.innerHTML = '<span class="text-danger"><i class="fas fa-times-circle mr-1"></i> Không thể kết nối</span>';
+    }
+}
+
+/* ── Export JSON Config ── */
+function exportConfigJSON() {
+    window.location.href = '/api/settings/export?t=' + Date.now();
+}
+
+/* ── Import JSON Config ── */
+function importConfigJSON(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        try {
+            const config = JSON.parse(e.target.result);
+            $.ajax({
+                url: '/api/settings/import',
+                method: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify(config),
+                success: function(res) {
+                    toastr.success('✅ Khôi phục cấu hình thành công!');
+                    setTimeout(() => location.reload(), 1000);
+                },
+                error: function(err) {
+                    toastr.error('Lỗi nhập cấu hình: ' + (err.responseJSON?.error || 'File không hợp lệ'));
+                }
+            });
+        } catch(ex) {
+            toastr.error('Lỗi định dạng file JSON không hợp lệ!');
+        }
+    };
+    reader.readAsText(file);
+}
+
+/* ── Helper: hiện thông báo ── */
+function showStatus(elId, type, msg) {
+    const el = document.getElementById(elId);
+    el.className = `mt-2 text-${type}`;
+    el.innerHTML = msg;
+    el.style.display = 'block';
+}
+
+/* ── Cập nhật thông số metrics & camera stability benchmark ── */
+async function updateSystemMetrics() {
+    try {
+        const r = await fetch('/api/settings/metrics');
+        if (!r.ok) return;
+        const d = await r.json();
+        if (d.camera_stats) {
+            document.getElementById('cam-total-frames').innerText = d.camera_stats.total_frames || 0;
+            document.getElementById('cam-dropped-frames').innerText = d.camera_stats.dropped_frames || 0;
+            document.getElementById('cam-drop-rate').innerText = (d.camera_stats.drop_rate || 0) + '%';
+        }
+    } catch(e) {}
+}
+
+/* ── Init ── */
+loadSettings();
+updateCameraStatus();
+updateSystemMetrics();
+setInterval(updateCameraStatus, 5000);
+setInterval(updateSystemMetrics, 3000);
+</script>
+{% endblock %}

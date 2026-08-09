@@ -1,0 +1,756 @@
+<!DOCTYPE html>
+<html lang="vi">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Đăng Nhập — Lab Monitor | Khoa CNTT - ĐH Công nghiệp Việt – Hung</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+
+    <style>
+        /* ════════════════════════════════════════════════════════
+       RESET & BASE
+    ════════════════════════════════════════════════════════ */
+        *,
+        *::before,
+        *::after {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --navy: #1E3A5F;
+            --blue: #2563A6;
+            --blue-hover: #1d4f8a;
+            --active: #2F6FAE;
+            --info: #17A2B8;
+            --success: #28A745;
+            --danger: #DC3545;
+            --warning: #F0AD4E;
+            --text: #212529;
+            --text-light: #6C757D;
+            --border: #DEE2E6;
+            --bg: #F4F6F9;
+            --white: #FFFFFF;
+        }
+
+        html,
+        body {
+            height: 100%;
+            font-family: 'Inter', 'Segoe UI', sans-serif;
+            font-size: 14px;
+        }
+
+        /* ════════════════════════════════════════════════════════
+       LAYOUT — 2 columns split screen
+    ════════════════════════════════════════════════════════ */
+        .login-wrapper {
+            display: flex;
+            min-height: 100vh;
+        }
+
+        /* ── Cột trái: Ảnh nền trường ── */
+        .login-hero {
+            flex: 1 1 55%;
+            position: relative;
+            overflow: hidden;
+            background: var(--navy);
+        }
+
+        .login-hero__bg {
+            position: absolute;
+            inset: 0;
+            background-image: url('/static/images/truong-dai-hoc-cong-nghiep-viet-hung.png');
+            background-size: cover;
+            background-position: center 30%;
+            filter: brightness(0.45) saturate(0.8);
+            transition: filter 0.5s;
+        }
+
+        /* Gradient overlay phía dưới để text dễ đọc */
+        .login-hero::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(160deg,
+                    rgba(30, 58, 95, 0.55) 0%,
+                    rgba(30, 58, 95, 0.20) 40%,
+                    rgba(0, 0, 0, 0.60) 100%);
+        }
+
+        /* Nội dung overlay trên ảnh */
+        .login-hero__content {
+            position: relative;
+            z-index: 10;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            padding: 48px 48px 40px;
+        }
+
+        /* Phần trên — Logo + Tên trường */
+        .hero-brand {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 16px;
+        }
+
+        .hero-logo {
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            object-fit: cover;
+            overflow: hidden;
+            display: block;
+        }
+
+        .hero-school-name {
+            font-size: 1.05rem;
+            font-weight: 700;
+            color: #ffffff;
+            line-height: 1.4;
+            letter-spacing: 0.3px;
+            text-shadow: 0 1px 4px rgba(0, 0, 0, 0.6);
+        }
+
+        .hero-school-name small {
+            display: block;
+            font-size: 0.78rem;
+            font-weight: 400;
+            color: rgba(255, 255, 255, 0.75);
+            margin-top: 3px;
+            letter-spacing: 0.5px;
+        }
+
+        /* Phần giữa — Tagline hệ thống */
+        .hero-tagline {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            padding: 40px 0;
+        }
+
+        .hero-system-name {
+            font-size: 2rem;
+            font-weight: 700;
+            color: #ffffff;
+            line-height: 1.25;
+            text-shadow: 0 2px 12px rgba(0, 0, 0, 0.6);
+            margin-bottom: 14px;
+            max-width: 420px;
+        }
+
+        .hero-system-name span {
+            color: #69b3ff;
+        }
+
+        .hero-desc {
+            font-size: 0.88rem;
+            color: rgba(255, 255, 255, 0.72);
+            line-height: 1.65;
+            max-width: 380px;
+            text-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
+        }
+
+        /* Pills công nghệ */
+        .hero-tech-pills {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: 24px;
+        }
+
+        .tech-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 5px 12px;
+            border-radius: 20px;
+            font-size: 0.72rem;
+            font-weight: 600;
+            border: 1px solid rgba(255, 255, 255, 0.25);
+            color: rgba(255, 255, 255, 0.85);
+            background: rgba(255, 255, 255, 0.10);
+            letter-spacing: 0.3px;
+            backdrop-filter: blur(4px);
+        }
+
+        .tech-pill i {
+            font-size: 0.7rem;
+            opacity: 0.85;
+        }
+
+        /* Phần dưới — footer thông tin */
+        .hero-footer {
+            font-size: 0.72rem;
+            color: rgba(255, 255, 255, 0.45);
+            line-height: 1.6;
+            border-top: 1px solid rgba(255, 255, 255, 0.12);
+            padding-top: 16px;
+        }
+
+        /* ── Cột phải: Form đăng nhập ── */
+        .login-panel {
+            flex: 0 0 420px;
+            background: var(--bg);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 40px 32px;
+            position: relative;
+        }
+
+        .login-panel::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: var(--white);
+            z-index: 0;
+        }
+
+        .login-form-wrap {
+            width: 100%;
+            max-width: 360px;
+            position: relative;
+            z-index: 1;
+        }
+
+        /* Header của form */
+        .form-header {
+            margin-bottom: 32px;
+        }
+
+        .form-header__logo {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 24px;
+            padding-bottom: 18px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .form-header__icon {
+            width: 40px;
+            height: 40px;
+            background: var(--navy);
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+
+        .form-header__icon i {
+            color: #ffffff;
+            font-size: 1rem;
+        }
+
+        .form-header__brand {
+            font-size: 0.95rem;
+            font-weight: 700;
+            color: var(--navy);
+            line-height: 1.2;
+        }
+
+        .form-header__brand small {
+            display: block;
+            font-size: 0.7rem;
+            font-weight: 400;
+            color: var(--text-light);
+            margin-top: 2px;
+        }
+
+        .form-header h1 {
+            font-size: 1.4rem;
+            font-weight: 700;
+            color: var(--text);
+            margin-bottom: 6px;
+        }
+
+        .form-header p {
+            font-size: 0.82rem;
+            color: var(--text-light);
+            line-height: 1.5;
+        }
+
+        /* ── Flash messages ── */
+        .flash-messages {
+            margin-bottom: 20px;
+        }
+
+        .flash-alert {
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+            padding: 10px 14px;
+            border-radius: 6px;
+            font-size: 0.82rem;
+            line-height: 1.4;
+            margin-bottom: 8px;
+            border: 1px solid transparent;
+        }
+
+        .flash-alert i {
+            margin-top: 1px;
+            flex-shrink: 0;
+        }
+
+        .flash-danger {
+            background: #fff5f5;
+            border-color: #f5c6cb;
+            color: #721c24;
+        }
+
+        .flash-warning {
+            background: #fffbe6;
+            border-color: #ffeeba;
+            color: #856404;
+        }
+
+        .flash-success {
+            background: #f0fff4;
+            border-color: #c3e6cb;
+            color: #155724;
+        }
+
+        .flash-info {
+            background: #e8f4fd;
+            border-color: #bee5eb;
+            color: #0c5460;
+        }
+
+        /* ── Form fields ── */
+        .field-group {
+            margin-bottom: 18px;
+        }
+
+        .field-group label {
+            display: block;
+            font-size: 0.8rem;
+            font-weight: 600;
+            color: var(--text);
+            margin-bottom: 6px;
+        }
+
+        .field-group label .required {
+            color: var(--danger);
+            margin-left: 2px;
+        }
+
+        .field-input-wrap {
+            position: relative;
+        }
+
+        .field-input-wrap .field-icon {
+            position: absolute;
+            left: 12px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: var(--text-light);
+            font-size: 0.85rem;
+            pointer-events: none;
+            z-index: 1;
+        }
+
+        .field-input-wrap input {
+            width: 100%;
+            padding: 10px 12px 10px 36px;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            font-size: 0.88rem;
+            font-family: 'Inter', sans-serif;
+            color: var(--text);
+            background: var(--white);
+            outline: none;
+            transition: border-color 0.2s, box-shadow 0.2s;
+            -webkit-appearance: none;
+        }
+
+        .field-input-wrap input::placeholder {
+            color: #adb5bd;
+            font-weight: 400;
+        }
+
+        .field-input-wrap input:focus {
+            border-color: var(--blue);
+            box-shadow: 0 0 0 3px rgba(37, 99, 166, 0.12);
+        }
+
+        .field-input-wrap input:focus+.field-icon {
+            color: var(--blue);
+        }
+
+        /* Toggle password visibility */
+        .toggle-pass {
+            position: absolute;
+            right: 12px;
+            top: 50%;
+            transform: translateY(-50%);
+            background: none;
+            border: none;
+            color: var(--text-light);
+            cursor: pointer;
+            padding: 0;
+            font-size: 0.85rem;
+            line-height: 1;
+        }
+
+        .toggle-pass:hover {
+            color: var(--text);
+        }
+
+        /* Remember me */
+        .remember-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 24px;
+        }
+
+        .remember-check {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.82rem;
+            color: var(--text-light);
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .remember-check input[type="checkbox"] {
+            width: 15px;
+            height: 15px;
+            accent-color: var(--blue);
+            cursor: pointer;
+            flex-shrink: 0;
+        }
+
+        /* ── Submit button ── */
+        .btn-submit {
+            width: 100%;
+            padding: 11px 16px;
+            background: var(--navy);
+            color: var(--white);
+            border: none;
+            border-radius: 6px;
+            font-size: 0.88rem;
+            font-weight: 600;
+            font-family: 'Inter', sans-serif;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            transition: background 0.2s, transform 0.1s;
+            letter-spacing: 0.3px;
+        }
+
+        .btn-submit:hover {
+            background: var(--blue);
+        }
+
+        .btn-submit:active {
+            transform: scale(0.99);
+        }
+
+        .btn-submit:disabled {
+            opacity: 0.7;
+            cursor: not-allowed;
+        }
+
+        /* ── Divider ── */
+        .form-divider {
+            height: 1px;
+            background: var(--border);
+            margin: 24px 0;
+        }
+
+        /* ── System status footer ── */
+        .form-footer {
+            text-align: center;
+        }
+
+        .sys-status {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 0.75rem;
+            color: var(--text-light);
+            padding: 6px 12px;
+            background: var(--bg);
+            border-radius: 20px;
+            border: 1px solid var(--border);
+            margin-bottom: 12px;
+        }
+
+        .status-dot {
+            width: 7px;
+            height: 7px;
+            border-radius: 50%;
+            background: var(--success);
+            flex-shrink: 0;
+        }
+
+        .status-dot.warn {
+            background: var(--warning);
+        }
+
+        .status-dot.error {
+            background: var(--danger);
+        }
+
+        .form-footer__note {
+            font-size: 0.72rem;
+            color: #adb5bd;
+            line-height: 1.6;
+        }
+
+        /* ════════════════════════════════════════════════════════
+       RESPONSIVE — Tablet & Mobile
+    ════════════════════════════════════════════════════════ */
+        @media (max-width: 900px) {
+            .login-hero {
+                display: none;
+            }
+
+            .login-panel {
+                flex: 1;
+                padding: 32px 24px;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .login-panel {
+                padding: 24px 16px;
+                align-items: flex-start;
+                padding-top: 48px;
+            }
+
+            .form-header h1 {
+                font-size: 1.2rem;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="login-wrapper">
+
+        <!-- ═══════════════════════════════════════════
+         CỘT TRÁI — Ảnh trường + Thông tin hệ thống
+    ═══════════════════════════════════════════ -->
+        <div class="login-hero">
+            <div class="login-hero__bg" aria-hidden="true"></div>
+
+            <div class="login-hero__content">
+
+                <!-- Brand trường -->
+                <div class="hero-brand">
+                    <img src="/static/images/logoVH_khongtieungu.png" alt="Logo Đại học Công nghiệp Việt – Hung"
+                        class="hero-logo">
+                    <div class="hero-school-name">
+                        Trường Đại học Công nghiệp Việt – Hung
+                        <small>Khoa Công nghệ Thông tin</small>
+                    </div>
+                </div>
+
+                <!-- Tagline hệ thống -->
+                <div class="hero-tagline">
+                    <div class="hero-system-name">
+                        Hệ thống Giám sát<br>
+                        Phòng Máy tính<br>
+                        <span>Thông minh</span>
+                    </div>
+                    <p class="hero-desc">
+                        Giám sát số người, phân tích tư thế và phát hiện bất thường theo thời gian thực.
+                        Mọi hành động điều khiển thiết bị đều cần xác nhận của con người trước khi thực thi.
+                    </p>
+
+                    <div class="hero-tech-pills">
+                        <span class="tech-pill"><i class="fas fa-brain"></i> AI Pose Detection</span>
+                        <span class="tech-pill"><i class="fas fa-wifi"></i> IoT / ESP32</span>
+                        <span class="tech-pill"><i class="fas fa-bolt"></i> Realtime WebSocket</span>
+                        <span class="tech-pill"><i class="fas fa-user-check"></i> Human-in-the-loop</span>
+                    </div>
+                </div>
+
+                <!-- Footer hero -->
+                <div class="hero-footer">
+                    Đồ án Tốt nghiệp — Khoa CNTT, ĐH Công nghiệp Việt – Hung &nbsp;·&nbsp;
+                    VIU Lab Monitor v3.0
+                </div>
+
+            </div>
+        </div>
+
+        <!-- ═══════════════════════════════════════════
+         CỘT PHẢI — Form đăng nhập
+    ═══════════════════════════════════════════ -->
+        <div class="login-panel">
+            <div class="login-form-wrap">
+
+                <!-- Header form -->
+                <div class="form-header">
+                    <div class="form-header__logo">
+                        <div class="form-header__icon">
+                            <i class="fas fa-desktop"></i>
+                        </div>
+                        <div class="form-header__brand">
+                            Lab Monitor
+                            <small>Hệ thống quản trị phòng máy</small>
+                        </div>
+                    </div>
+                    <h1>Đăng nhập</h1>
+                    <p>Vui lòng nhập thông tin tài khoản được cấp để tiếp tục.</p>
+                </div>
+
+                <!-- Flash messages -->
+                {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                <div class="flash-messages" role="alert">
+                    {% for category, message in messages %}
+                    <div class="flash-alert flash-{{ category }}">
+                        {% if category == 'danger' %}
+                        <i class="fas fa-exclamation-circle"></i>
+                        {% elif category == 'warning' %}
+                        <i class="fas fa-exclamation-triangle"></i>
+                        {% elif category == 'success' %}
+                        <i class="fas fa-check-circle"></i>
+                        {% else %}
+                        <i class="fas fa-info-circle"></i>
+                        {% endif %}
+                        <span>{{ message }}</span>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% endif %}
+                {% endwith %}
+
+                <!-- Form -->
+                <form method="POST" action="{{ url_for('auth.login') }}" autocomplete="off" id="login-form" novalidate>
+
+                    <div class="field-group">
+                        <label for="username">
+                            Tên đăng nhập <span class="required">*</span>
+                        </label>
+                        <div class="field-input-wrap">
+                            <i class="fas fa-user field-icon"></i>
+                            <input type="text" id="username" name="username" placeholder="Nhập tên đăng nhập" required
+                                autofocus autocomplete="username" spellcheck="false">
+                        </div>
+                    </div>
+
+                    <div class="field-group">
+                        <label for="password">
+                            Mật khẩu <span class="required">*</span>
+                        </label>
+                        <div class="field-input-wrap">
+                            <i class="fas fa-lock field-icon"></i>
+                            <input type="password" id="password" name="password" placeholder="Nhập mật khẩu" required
+                                autocomplete="current-password">
+                            <button type="button" class="toggle-pass" id="toggle-pass" aria-label="Hiện/ẩn mật khẩu">
+                                <i class="fas fa-eye" id="toggle-icon"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="remember-row">
+                        <label class="remember-check">
+                            <input type="checkbox" id="remember" name="remember">
+                            Ghi nhớ đăng nhập
+                        </label>
+                    </div>
+
+                    <button type="submit" class="btn-submit" id="btn-submit">
+                        <i class="fas fa-sign-in-alt"></i>
+                        Đăng nhập
+                    </button>
+
+                </form>
+
+                <div class="form-divider"></div>
+
+                <!-- Status + note -->
+                <div class="form-footer">
+                    <div class="sys-status">
+                        <span class="status-dot" id="sys-dot"></span>
+                        <span id="sys-status-text">Đang kiểm tra kết nối...</span>
+                    </div>
+                    <p class="form-footer__note">
+                        Hệ thống dành riêng cho Quản trị viên và Giám sát viên.<br>
+                        Tài khoản bị khóa sau 5 lần đăng nhập sai. Liên hệ Admin để được hỗ trợ.
+                    </p>
+                </div>
+
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        (function () {
+            'use strict';
+
+            /* ── Toggle hiện/ẩn mật khẩu ── */
+            const passInput = document.getElementById('password');
+            const toggleBtn = document.getElementById('toggle-pass');
+            const toggleIcon = document.getElementById('toggle-icon');
+
+            if (toggleBtn) {
+                toggleBtn.addEventListener('click', function () {
+                    const isPass = passInput.type === 'password';
+                    passInput.type = isPass ? 'text' : 'password';
+                    toggleIcon.className = isPass ? 'fas fa-eye-slash' : 'fas fa-eye';
+                    passInput.focus();
+                });
+            }
+
+            /* ── Vô hiệu hóa double-submit ── */
+            const form = document.getElementById('login-form');
+            const submitBtn = document.getElementById('btn-submit');
+
+            if (form) {
+                form.addEventListener('submit', function () {
+                    if (submitBtn) {
+                        submitBtn.disabled = true;
+                        submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Đang xác thực...';
+                    }
+                });
+            }
+
+            /* ── Kiểm tra kết nối server (ping /health) ── */
+            const sysDot = document.getElementById('sys-dot');
+            const sysText = document.getElementById('sys-status-text');
+
+            function checkHealth() {
+                fetch('/health', { method: 'GET', cache: 'no-store' })
+                    .then(function (res) {
+                        if (res.ok) {
+                            sysDot.className = 'status-dot';          /* green */
+                            sysText.textContent = 'Hệ thống hoạt động bình thường';
+                        } else {
+                            sysDot.className = 'status-dot warn';
+                            sysText.textContent = 'Dịch vụ phản hồi chậm';
+                        }
+                    })
+                    .catch(function () {
+                        sysDot.className = 'status-dot error';
+                        sysText.textContent = 'Không thể kết nối đến máy chủ';
+                    });
+            }
+
+            checkHealth();
+        })();
+    </script>
+
+</body>
+
+</html>

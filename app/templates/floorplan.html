@@ -1,0 +1,656 @@
+{% extends "base.html" %}
+{% block title %}Bản Đồ Phòng Máy — VIU Lab Monitor{% endblock %}
+{% block header_title %}Bản Đồ Phòng Máy{% endblock %}
+{% block title_sub %}Interactive Floor Plan — Auto Ping Status{% endblock %}
+
+{% block extra_css %}
+<style>
+/* ── Bố cục chính ───────────────────────────── */
+#floorplan-wrapper {
+    position: relative;
+    background: #1a1f2e;
+    border-radius: 12px;
+    min-height: 580px;
+    box-shadow: 0 4px 24px rgba(0,0,0,0.35);
+    overflow: hidden;
+    border: 1px solid #2d3748;
+    user-select: none;
+}
+
+/* ── Thiết bị trên bản đồ ───────────────────── */
+.map-item {
+    position: absolute;
+    cursor: default;
+    width: 82px;
+    text-align: center;
+    transition: transform 0.15s ease;
+    z-index: 10;
+}
+.map-item:hover { transform: scale(1.08); z-index: 20; }
+.map-item.draggable { cursor: grab; }
+.map-item.draggable:active { cursor: grabbing; }
+
+.map-item .item-icon-wrap {
+    position: relative;
+    display: inline-block;
+    width: 52px;
+    height: 52px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 22px;
+    margin: 0 auto 4px;
+    border: 2px solid transparent;
+    transition: all 0.3s ease;
+}
+
+/* ── Loại thiết bị ──────────────────────────── */
+.map-item.type-computer .item-icon-wrap {
+    background: rgba(49, 130, 206, 0.2);
+    border-color: #3182ce;
+    color: #63b3ed;
+}
+.map-item.type-camera .item-icon-wrap {
+    background: rgba(56, 161, 105, 0.2);
+    border-color: #38a169;
+    color: #68d391;
+}
+.map-item.type-iot .item-icon-wrap {
+    background: rgba(214, 158, 46, 0.2);
+    border-color: #d69e2e;
+    color: #f6e05e;
+}
+
+/* ── Đèn trạng thái ─────────────────────────── */
+.status-dot {
+    position: absolute;
+    top: -4px;
+    right: -4px;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    border: 2px solid #1a1f2e;
+}
+.status-dot.online  { background: #48bb78; }
+.status-dot.offline { background: #fc8181; }
+.status-dot.maintenance { background: #f6ad55; }
+.status-dot.unknown { background: #718096; }
+
+/* ── Nhấp nháy khi có cảnh báo ─────────────── */
+@keyframes blink-red {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(252,129,74,0); }
+    50%       { box-shadow: 0 0 0 8px rgba(252,129,74,0.5); }
+}
+.map-item.has-alert .item-icon-wrap {
+    border-color: #fc8181 !important;
+    animation: blink-red 1.2s infinite;
+}
+.map-item.has-alert .status-dot {
+    background: #fc4a1a;
+    animation: blink-red 1.2s infinite;
+}
+
+/* ── Tên thiết bị ───────────────────────────── */
+.map-item .item-label {
+    font-size: 0.7rem;
+    color: #a0aec0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 80px;
+    line-height: 1.2;
+}
+.map-item .ping-label {
+    font-size: 0.6rem;
+    color: #4fd1c5;
+    display: block;
+}
+
+/* ── Popup thông tin chi tiết ───────────────── */
+#info-popup {
+    position: absolute;
+    z-index: 100;
+    background: #2d3748;
+    border: 1px solid #4a5568;
+    border-radius: 10px;
+    padding: 12px 15px;
+    min-width: 200px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+    color: #e2e8f0;
+    font-size: 0.82rem;
+    display: none;
+    pointer-events: none;
+}
+#info-popup .popup-title {
+    font-weight: 700;
+    font-size: 0.9rem;
+    color: #fff;
+    margin-bottom: 6px;
+    border-bottom: 1px solid #4a5568;
+    padding-bottom: 5px;
+}
+#info-popup .popup-row { margin: 3px 0; }
+#info-popup .popup-key { color: #a0aec0; }
+
+/* ── Thanh trạng thái tóm tắt ───────────────── */
+.stat-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: #2d3748;
+    border-radius: 20px;
+    padding: 4px 14px;
+    font-size: 0.82rem;
+    color: #e2e8f0;
+    border: 1px solid #4a5568;
+}
+.stat-pill .dot {
+    width: 9px; height: 9px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+/* ── Legend ─────────────────────────────────── */
+.legend-row {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 0.78rem;
+    color: #a0aec0;
+    margin-right: 14px;
+}
+.legend-dot {
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+/* ── Toolbar ─────────────────────────────────── */
+#toolbar { background: #f8f9fa; border-radius: 10px; padding: 10px 14px; }
+
+/* ── Timestamp badge ─────────────────────────── */
+#last-update-badge {
+    font-size: 0.72rem;
+    color: #718096;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<!-- ── Toolbar ─────────────────────────────── -->
+<div id="toolbar" class="mb-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
+    <div class="d-flex align-items-center flex-wrap gap-2">
+        <div>
+            <label class="text-muted mb-0 mr-1" style="font-size:0.85rem;">Phòng:</label>
+            <select id="room-select" class="form-control form-control-sm d-inline-block w-auto">
+                <option value="">-- Chọn phòng --</option>
+                {% for room in rooms %}
+                <option value="{{ room.id }}">{{ room.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <!-- Stat pills -->
+        <span class="stat-pill" id="stat-online"><span class="dot" style="background:#48bb78"></span><span id="cnt-online">0</span> Online</span>
+        <span class="stat-pill" id="stat-offline"><span class="dot" style="background:#fc8181"></span><span id="cnt-offline">0</span> Offline</span>
+        <span class="stat-pill" id="stat-maintenance"><span class="dot" style="background:#f6ad55"></span><span id="cnt-maintenance">0</span> Bảo trì</span>
+        <span class="stat-pill" id="stat-alert"><span class="dot" style="background:#fc4a1a;"></span><span id="cnt-alert">0</span> Cảnh báo</span>
+    </div>
+
+    <div class="d-flex align-items-center gap-2">
+        <span id="last-update-badge"><i class="fas fa-sync-alt mr-1"></i>Chưa cập nhật</span>
+        <button id="btn-refresh" class="btn btn-outline-info btn-sm" onclick="loadDevices()">
+            <i class="fas fa-sync-alt mr-1"></i> Làm mới
+        </button>
+        <button id="btn-edit-mode" class="btn btn-outline-warning btn-sm">
+            <i class="fas fa-edit mr-1"></i> Chỉnh sửa vị trí
+        </button>
+        <button id="btn-save" class="btn btn-success btn-sm d-none">
+            <i class="fas fa-save mr-1"></i> Lưu vị trí
+        </button>
+        <button id="btn-cancel" class="btn btn-secondary btn-sm d-none" onclick="cancelEdit()">
+            Hủy
+        </button>
+    </div>
+</div>
+
+<!-- ── Bản đồ chính ─────────────────────────── -->
+<div id="floorplan-wrapper">
+    <!-- SVG Grid nền -->
+    <svg width="100%" height="100%" style="position:absolute;top:0;left:0;z-index:0;">
+        <defs>
+            <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+                <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#2d3748" stroke-width="0.6"/>
+            </pattern>
+        </defs>
+        <rect width="100%" height="100%" fill="url(#grid)"/>
+    </svg>
+
+    <!-- Nhãn góc -->
+    <div style="position:absolute;top:10px;left:14px;z-index:5;color:#4a5568;font-size:0.7rem;letter-spacing:0.5px;">
+        CỬA VÀO →
+    </div>
+
+    <!-- Container chứa các thiết bị -->
+    <div id="items-container" style="position:absolute;top:0;left:0;width:100%;height:100%;z-index:10;">
+        <div class="text-center" style="margin-top:240px;color:#4a5568;" id="no-room-msg">
+            <i class="fas fa-map-marked-alt fa-3x mb-3 d-block" style="color:#2d3748;"></i>
+            Vui lòng chọn phòng máy để xem bản đồ
+        </div>
+    </div>
+
+    <!-- Popup thông tin -->
+    <div id="info-popup">
+        <div class="popup-title" id="popup-title">Thông tin</div>
+        <div id="popup-body"></div>
+    </div>
+</div>
+
+<!-- ── Legend ───────────────────────────────── -->
+<div class="d-flex flex-wrap align-items-center mt-3 px-1">
+    <div class="legend-row"><div class="legend-dot" style="background:#48bb78"></div> Online</div>
+    <div class="legend-row"><div class="legend-dot" style="background:#fc8181"></div> Offline</div>
+    <div class="legend-row"><div class="legend-dot" style="background:#f6ad55"></div> Bảo trì</div>
+    <div class="legend-row"><div class="legend-dot" style="background:#718096"></div> Chưa cấu hình IP</div>
+    <div class="legend-row ml-3">
+        <div class="legend-dot" style="background:#63b3ed;border-radius:2px;"></div> Máy tính
+    </div>
+    <div class="legend-row">
+        <div class="legend-dot" style="background:#68d391;border-radius:2px;"></div> Camera
+    </div>
+    <div class="legend-row">
+        <div class="legend-dot" style="background:#f6e05e;border-radius:2px;"></div> Thiết bị IoT
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+/* ══════════════════════════════════════════════
+   FLOORPLAN 2.0 — Interactive Map with Auto-Ping Status
+   ══════════════════════════════════════════════ */
+
+let isEditMode    = false;
+let currentData   = { cameras: [], computers: [], iot_devices: [] };
+let dragObj       = null;
+let dragOffset    = { x: 0, y: 0 };
+let positions     = [];          // [{id, type, x_pos, y_pos}]
+let alertZones    = [];          // từ /api/floorplan/status
+let refreshTimer  = null;
+
+// ── Đọc dữ liệu thiết bị theo phòng ─────────────────────────
+function loadDevices() {
+    const roomId = $('#room-select').val();
+    if (!roomId) {
+        $('#items-container').html('<div class="text-center" style="margin-top:240px;color:#4a5568;" id="no-room-msg"><i class="fas fa-map-marked-alt fa-3x mb-3 d-block" style="color:#2d3748;"></i>Vui lòng chọn phòng máy để xem bản đồ</div>');
+        resetStats();
+        return;
+    }
+
+    Promise.all([
+        fetch(`/api/floorplan/devices?room_id=${roomId}`).then(r => r.json()),
+        fetch('/api/floorplan/status').then(r => r.json())
+    ]).then(([devices, status]) => {
+        currentData = devices;
+        alertZones  = status.alert_zones || [];
+        renderItems(devices, alertZones);
+        updateStats(devices, status);
+        updateTimestamp();
+    }).catch(err => {
+        console.error('Lỗi tải dữ liệu floorplan:', err);
+    });
+}
+
+// ── Cập nhật trạng thái không reload full ────────────────────
+function refreshStatus() {
+    const roomId = $('#room-select').val();
+    if (!roomId) return;
+
+    Promise.all([
+        fetch(`/api/computers/ping-status?room_id=${roomId}`).then(r => r.json()),
+        fetch('/api/floorplan/status').then(r => r.json())
+    ]).then(([computers, status]) => {
+        // Cập nhật data nội bộ
+        currentData.computers = computers;
+        alertZones = status.alert_zones || [];
+
+        // Cập nhật visual từng item (không render lại toàn bộ)
+        computers.forEach(c => updateComputerIcon(c));
+        updateStats(currentData, status);
+        updateTimestamp();
+    }).catch(() => {});
+}
+
+function updateComputerIcon(comp) {
+    const el = $(`[data-id="${comp.id}"][data-type="computer"]`);
+    if (!el.length) return;
+
+    const dot = el.find('.status-dot');
+    dot.removeClass('online offline maintenance unknown').addClass(comp.status || 'unknown');
+
+    const ping = el.find('.ping-label');
+    if (comp.status === 'online' && comp.last_ping_ms) {
+        ping.text(`${comp.last_ping_ms}ms`);
+    } else if (comp.status === 'offline') {
+        ping.text('OFFLINE');
+    } else {
+        ping.text('');
+    }
+
+    // Alert blink
+    if (alertZones.some(z => z === comp.name || z.includes(comp.name))) {
+        el.addClass('has-alert');
+    } else {
+        el.removeClass('has-alert');
+    }
+}
+
+// ── Vẽ các thiết bị lên bản đồ ──────────────────────────────
+function renderItems(data, alerts) {
+    const container = $('#items-container');
+    container.empty();
+    positions = [];
+
+    // Theo dõi index để tự động dàn đều các thiết bị chưa có vị trí (x=0, y=0)
+    const autoGrid = {
+        computer: { idx: 0, cols: 6, startX: 60,  startY: 80,  gapX: 110, gapY: 120 },
+        camera:   { idx: 0, cols: 4, startX: 60,  startY: 420, gapX: 130, gapY: 110 },
+        iot:      { idx: 0, cols: 4, startX: 700, startY: 80,  gapX: 110, gapY: 120 },
+    };
+
+    function getAutoPos(type) {
+        const g = autoGrid[type] || autoGrid.computer;
+        const col = g.idx % g.cols;
+        const row = Math.floor(g.idx / g.cols);
+        g.idx++;
+        return {
+            x: g.startX + col * g.gapX,
+            y: g.startY + row * g.gapY
+        };
+    }
+
+    function addItem(item, type, icon) {
+        // Nếu x_pos và y_pos đều là 0 (chưa đặt) → tự động phân bổ theo lưới
+        const hasCustomPos = item.x_pos > 0 || item.y_pos > 0;
+        let x, y;
+        if (hasCustomPos) {
+            x = item.x_pos;
+            y = item.y_pos;
+        } else {
+            const auto = getAutoPos(type);
+            x = auto.x;
+            y = auto.y;
+        }
+
+        let statusClass = 'unknown';
+        let pingText = '';
+
+        if (type === 'computer') {
+            statusClass = item.status || 'unknown';
+            if (item.status === 'online' && item.last_ping_ms) {
+                pingText = `${item.last_ping_ms}ms`;
+            } else if (item.status === 'offline') {
+                pingText = 'OFFLINE';
+            }
+        } else if (type === 'camera') {
+            statusClass = item.status ? 'online' : 'offline';
+        } else {
+            statusClass = item.status || 'unknown';
+        }
+
+        const hasAlert = alerts && alerts.some(z => z === item.name || z.includes(item.name));
+
+        // Luôn push vị trí THỰC TẾ đang hiển thị (kể cả auto-grid)
+        positions.push({ id: item.id, type, x_pos: x, y_pos: y });
+
+        const el = $(`
+            <div class="map-item type-${type} ${hasAlert ? 'has-alert' : ''} ${!hasCustomPos ? 'auto-placed' : ''}"
+                 data-id="${item.id}" data-type="${type}"
+                 style="left:${x}px; top:${y}px;"
+                 title="${escHtml(item.name || '')}">
+                <div class="item-icon-wrap">
+                    <i class="fas ${icon}"></i>
+                    <span class="status-dot ${statusClass}"></span>
+                </div>
+                <div class="item-label">${escHtml(item.name || item.ip_address || '')}</div>
+                <span class="ping-label">${pingText}</span>
+            </div>
+        `);
+
+        // Click → show popup
+        el.on('click', function(e) {
+            if (isEditMode) return;
+            showPopup(e, item, type, statusClass);
+        });
+
+        container.append(el);
+    }
+
+    if (data.cameras)     data.cameras.forEach(c    => addItem(c, 'camera',   'fa-video'));
+    if (data.computers)   data.computers.forEach(c  => addItem(c, 'computer', 'fa-desktop'));
+    if (data.iot_devices) data.iot_devices.forEach(c => addItem(c, 'iot',     'fa-microchip'));
+
+    // Hiển thị gợi ý nếu chưa có thiết bị nào
+    const total = (data.cameras?.length || 0) + (data.computers?.length || 0) + (data.iot_devices?.length || 0);
+    if (total === 0) {
+        container.html('<div class="text-center" style="margin-top:240px;color:#4a5568;"><i class="fas fa-desktop fa-3x mb-3 d-block" style="color:#2d3748;"></i>Phòng này chưa có thiết bị nào.<br><small>Thêm thiết bị tại trang Quản lý Máy tính / Camera / IoT</small></div>');
+    } else if (!isEditMode) {
+        // Hiển thị gợi ý kéo thả nếu có thiết bị mới chưa đặt vị trí
+        const autoPlaced = container.find('.auto-placed').length;
+        if (autoPlaced > 0) {
+            const hint = $(`<div style="position:absolute;bottom:12px;right:14px;z-index:50;">
+                <span class="badge badge-warning px-3 py-2" style="font-size:0.8rem;">
+                    <i class="fas fa-info-circle mr-1"></i>
+                    ${autoPlaced} thiết bị mới — bật <b>Chỉnh sửa vị trí</b> để kéo thả và lưu lại
+                </span>
+            </div>`);
+            container.append(hint);
+        }
+    }
+
+    if (isEditMode) enableDrag();
+}
+
+// ── Popup thông tin ──────────────────────────────────────────
+function showPopup(e, item, type, statusClass) {
+    const wrapper = document.getElementById('floorplan-wrapper');
+    const rect    = wrapper.getBoundingClientRect();
+    let px = e.clientX - rect.left + 12;
+    let py = e.clientY - rect.top  + 12;
+
+    const typeLabel = { computer: '🖥️ Máy tính', camera: '📷 Camera', iot: '🔧 Thiết bị IoT' }[type] || type;
+    const statusLabel = { online: '🟢 Online', offline: '🔴 Offline', maintenance: '🟡 Bảo trì', unknown: '⚪ Chưa rõ' }[statusClass] || statusClass;
+
+    $('#popup-title').text(item.name || item.ip_address || 'Thiết bị');
+    let html = `
+        <div class="popup-row"><span class="popup-key">Loại: </span>${typeLabel}</div>
+        <div class="popup-row"><span class="popup-key">Trạng thái: </span>${statusLabel}</div>
+    `;
+    if (item.ip_address)  html += `<div class="popup-row"><span class="popup-key">IP: </span><code>${item.ip_address}</code></div>`;
+    if (item.mac_address) html += `<div class="popup-row"><span class="popup-key">MAC: </span><code>${item.mac_address}</code></div>`;
+    if (item.last_seen)   html += `<div class="popup-row"><span class="popup-key">Ping gần nhất: </span>${item.last_seen}</div>`;
+    if (item.last_ping_ms) html += `<div class="popup-row"><span class="popup-key">Độ trễ: </span><span class="text-success">${item.last_ping_ms}ms</span></div>`;
+    if (item.room_name)   html += `<div class="popup-row"><span class="popup-key">Phòng: </span>${item.room_name}</div>`;
+
+    // Nút Ping ngay (chỉ máy tính)
+    if (type === 'computer') {
+        html += `<div class="mt-2"><button class="btn btn-xs btn-outline-info btn-block" onclick="pingNow(${item.id})"><i class="fas fa-satellite-dish mr-1"></i>Ping ngay</button></div>`;
+    }
+
+    $('#popup-body').html(html);
+
+    // Kiểm tra vượt rìa bên phải
+    const popup = document.getElementById('info-popup');
+    popup.style.display = 'block';
+    if (px + popup.offsetWidth > wrapper.clientWidth - 10) {
+        px = e.clientX - rect.left - popup.offsetWidth - 12;
+    }
+    if (py + popup.offsetHeight > wrapper.clientHeight - 10) {
+        py = e.clientY - rect.top - popup.offsetHeight - 12;
+    }
+    popup.style.left = px + 'px';
+    popup.style.top  = py + 'px';
+}
+
+function hidePopup() { document.getElementById('info-popup').style.display = 'none'; }
+
+// ── Ping ngay lập tức ────────────────────────────────────────
+function pingNow(computerId) {
+    hidePopup();
+    const el = $(`[data-id="${computerId}"][data-type="computer"]`);
+    el.find('.ping-label').text('Pinging...');
+    el.find('.status-dot').removeClass('online offline unknown').addClass('unknown');
+
+    fetch(`/api/computers/${computerId}/ping-now`, { method: 'POST' })
+        .then(r => r.json())
+        .then(data => {
+            const dot = el.find('.status-dot');
+            dot.removeClass('online offline unknown maintenance').addClass(data.status);
+            el.find('.ping-label').text(data.success ? `${data.latency_ms}ms` : 'OFFLINE');
+
+            // Cập nhật data nội bộ
+            const comp = currentData.computers?.find(c => c.id === computerId);
+            if (comp) {
+                comp.status = data.status;
+                comp.last_ping_ms = data.latency_ms;
+            }
+
+            toastr.info(`${data.name}: ${data.status === 'online' ? '🟢 Online (' + data.latency_ms + 'ms)' : '🔴 Offline'}`);
+        })
+        .catch(() => toastr.error('Lỗi khi Ping'));
+}
+
+// ── Thống kê ─────────────────────────────────────────────────
+function updateStats(data, status) {
+    const computers = data.computers || [];
+    const online   = computers.filter(c => c.status === 'online').length;
+    const offline  = computers.filter(c => c.status === 'offline').length;
+    const maint    = computers.filter(c => c.status === 'maintenance').length;
+    const alerts   = (status && status.pending_total) || 0;
+
+    $('#cnt-online').text(online);
+    $('#cnt-offline').text(offline);
+    $('#cnt-maintenance').text(maint);
+    $('#cnt-alert').text(alerts);
+
+    $('#stat-offline').toggleClass('border-danger', offline > 0);
+    $('#stat-alert').toggleClass('border-danger',   alerts > 0);
+}
+
+function resetStats() {
+    ['cnt-online','cnt-offline','cnt-maintenance','cnt-alert'].forEach(id => $(`#${id}`).text(0));
+}
+
+function updateTimestamp() {
+    const now = new Date();
+    $('#last-update-badge').html(`<i class="fas fa-check-circle text-success mr-1"></i>Cập nhật: ${now.getHours().toString().padStart(2,'0')}:${now.getMinutes().toString().padStart(2,'0')}:${now.getSeconds().toString().padStart(2,'0')}`);
+}
+
+// ── Drag & Drop ───────────────────────────────────────────────
+function enableDrag() {
+    const wrapper = document.getElementById('floorplan-wrapper');
+
+    $(wrapper).on('mousedown.drag', '.map-item', function(e) {
+        if (!isEditMode) return;
+        dragObj = this;
+        const rect = wrapper.getBoundingClientRect();
+        const pos  = $(this).position();
+        dragOffset.x = e.clientX - rect.left - pos.left;
+        dragOffset.y = e.clientY - rect.top  - pos.top;
+        e.preventDefault();
+    });
+
+    $(document).on('mousemove.drag', function(e) {
+        if (!dragObj) return;
+        const rect = document.getElementById('floorplan-wrapper').getBoundingClientRect();
+        let x = Math.max(0, e.clientX - rect.left - dragOffset.x);
+        let y = Math.max(0, e.clientY - rect.top  - dragOffset.y);
+        x = Math.min(x, rect.width  - 82);
+        y = Math.min(y, rect.height - 90);
+        $(dragObj).css({ left: x + 'px', top: y + 'px' });
+    });
+
+    $(document).on('mouseup.drag', function() {
+        if (!dragObj) return;
+        const id   = $(dragObj).data('id');
+        const type = $(dragObj).data('type');
+        const pos  = $(dragObj).position();
+        const entry = positions.find(p => p.id == id && p.type == type);
+        if (entry) { entry.x_pos = Math.round(pos.left); entry.y_pos = Math.round(pos.top); }
+        dragObj = null;
+    });
+
+    $('.map-item').addClass('draggable');
+}
+
+function disableDrag() {
+    $('#floorplan-wrapper').off('mousedown.drag');
+    $(document).off('mousemove.drag mouseup.drag');
+    $('.map-item').removeClass('draggable');
+}
+
+function cancelEdit() {
+    isEditMode = false;
+    disableDrag();
+    $('#btn-edit-mode').removeClass('btn-warning').addClass('btn-outline-warning').html('<i class="fas fa-edit mr-1"></i> Chỉnh sửa vị trí');
+    $('#btn-save, #btn-cancel').addClass('d-none');
+    loadDevices();
+}
+
+// ── Lưu vị trí ───────────────────────────────────────────────
+function savePositions() {
+    const roomId = $('#room-select').val();
+    if (!roomId) return;
+
+    fetch('/api/floorplan/devices', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ room_id: roomId, positions })
+    })
+    .then(r => r.json())
+    .then(() => {
+        toastr.success('Đã lưu vị trí thiết bị thành công!');
+        cancelEdit();
+    })
+    .catch(() => toastr.error('Lỗi khi lưu vị trí!'));
+}
+
+// ── Khởi tạo ─────────────────────────────────────────────────
+function escHtml(s) {
+    return (s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+$(document).ready(function() {
+    // Chọn phòng
+    $('#room-select').change(function() {
+        loadDevices();
+        clearInterval(refreshTimer);
+        if ($(this).val()) {
+            refreshTimer = setInterval(refreshStatus, 15000); // 15 giây
+        }
+    });
+
+    // Bật/tắt chỉnh sửa
+    $('#btn-edit-mode').click(function() {
+        isEditMode = !isEditMode;
+        if (isEditMode) {
+            $(this).removeClass('btn-outline-warning').addClass('btn-warning').html('<i class="fas fa-edit mr-1"></i> Đang chỉnh sửa');
+            $('#btn-save, #btn-cancel').removeClass('d-none');
+            enableDrag();
+            clearInterval(refreshTimer); // Tạm dừng auto-refresh khi đang kéo thả
+        } else {
+            cancelEdit();
+        }
+    });
+
+    // Lưu
+    $('#btn-save').click(savePositions);
+
+    // Click ngoài → đóng popup
+    $('#floorplan-wrapper').on('click', function(e) {
+        if (!$(e.target).closest('.map-item').length) hidePopup();
+    });
+});
+</script>
+{% endblock %}

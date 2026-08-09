@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}VIU Lab Monitor — Admin Control Panel{% endblock %}</title>
+
+    <!-- Google Font: Source Sans Pro / Inter -->
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Source+Sans+Pro:300,400,400i,700&display=fallback">
+    <!-- Font Awesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+    <!-- Theme style (AdminLTE v3.2) -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/css/adminlte.min.css">
+    <!-- Bootstrap 4 -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/css/bootstrap.min.css">
+
+    <style>
+        /* Tùy chỉnh nhẹ giao diện Operations UI */
+        .brand-link {
+            background-color: #1e3a5f !important;
+            color: #ffffff !important;
+            border-bottom: 1px solid rgba(255,255,255,0.1) !important;
+        }
+        .main-sidebar {
+            background-color: #2b3035 !important;
+        }
+        .nav-sidebar .nav-link.active {
+            background-color: #2f6fae !important;
+            color: #ffffff !important;
+        }
+        .main-header {
+            border-bottom: 1px solid #dee2e6;
+            background-color: #ffffff !important;
+        }
+        /* Custom styles for system indicators on top navbar */
+        .connection-indicator {
+            font-size: 0.85rem;
+            padding: 4px 10px;
+            border-radius: 12px;
+            background-color: #f4f6f9;
+            border: 1px solid #dee2e6;
+            margin-right: 8px;
+        }
+        .connection-dot {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            margin-right: 5px;
+        }
+        .bg-success-dot { background-color: #28a745; }
+        .bg-warning-dot { background-color: #ffc107; }
+        .bg-danger-dot { background-color: #dc3545; }
+    </style>
+    {% block extra_css %}{% endblock %}
+</head>
+<body class="hold-transition sidebar-mini layout-fixed layout-navbar-fixed">
+<div class="wrapper">
+
+    <!-- ═══════════════════════════════════════════
+         NAVBAR (Top Header)
+         ═══════════════════════════════════════════ -->
+    <nav class="main-header navbar navbar-expand navbar-light navbar-white">
+        <!-- Left navbar links -->
+        <ul class="navbar-nav">
+            <li class="nav-item">
+                <a class="nav-link" data-widget="pushmenu" href="#" role="button"><i class="fas fa-bars"></i></a>
+            </li>
+            <li class="nav-item d-none d-sm-inline-block">
+                <span class="nav-link text-dark font-weight-bold">
+                    Trường Đại học Công nghiệp Việt – Hung
+                </span>
+            </li>
+        </ul>
+
+        <!-- Right navbar links -->
+        <ul class="navbar-nav ml-auto align-items-center">
+            <!-- System Connection Status -->
+            <li class="nav-item d-none d-md-inline-block">
+                <div class="connection-indicator">
+                    <span class="connection-dot bg-success-dot" id="top-nav-status-dot"></span>
+                    <span class="font-weight-bold" id="top-nav-status-text">Hệ thống ổn định</span>
+                </div>
+            </li>
+
+            <!-- User Dropdown Menu -->
+            <li class="nav-item dropdown user-menu">
+                <a href="#" class="nav-link dropdown-toggle" data-toggle="dropdown">
+                    <i class="fas fa-user-circle fa-lg mr-1 text-secondary"></i>
+                    <span class="d-none d-md-inline">{{ current_user.display_name or current_user.username }}</span>
+                </a>
+                <ul class="dropdown-menu dropdown-menu-lg dropdown-menu-right">
+                    <!-- User image -->
+                    <li class="user-header bg-primary">
+                        <i class="fas fa-user-circle fa-3x mb-2 text-white"></i>
+                        <p>
+                            {{ current_user.display_name or current_user.username }}
+                            <small>{{ 'Quản trị viên (Admin)' if current_user.role == 'admin' else 'Giám sát viên (Monitor)' }}</small>
+                        </p>
+                    </li>
+                    <!-- Menu Footer-->
+                    <li class="user-footer d-flex justify-content-between">
+                        <a href="{{ url_for('main.accounts') }}" class="btn btn-default btn-flat">Tài khoản</a>
+                        <a href="{{ url_for('auth.logout') }}" class="btn btn-default btn-flat text-danger">Đăng xuất</a>
+                    </li>
+                </ul>
+            </li>
+        </ul>
+    </nav>
+
+    <!-- ═══════════════════════════════════════════
+         SIDEBAR (Left Navigation)
+         ═══════════════════════════════════════════ -->
+    <aside class="main-sidebar sidebar-dark-primary elevation-4">
+        <!-- Brand Logo -->
+        <a href="{{ url_for('main.dashboard') }}" class="brand-link">
+            <img src="/static/images/logoVH.png" alt="VH Logo" class="brand-image img-circle elevation-3" style="opacity: .8; background: #fff; padding: 2px;">
+            <span class="brand-text font-weight-bold">VIU Lab Monitor</span>
+        </a>
+
+        <!-- Sidebar -->
+        <div class="sidebar">
+            <!-- Sidebar user panel (optional) -->
+            <div class="user-panel mt-3 pb-3 mb-3 d-flex align-items-center">
+                <div class="image text-white pl-2">
+                    <i class="fas fa-user-shield text-info"></i>
+                </div>
+                <div class="info">
+                    <a href="#" class="d-block font-weight-bold">
+                        {{ current_user.display_name or current_user.username }}
+                        <span class="badge badge-info ml-1" style="font-size: 0.65rem;">
+                            {{ current_user.role | upper }}
+                        </span>
+                    </a>
+                </div>
+            </div>
+
+            <!-- Sidebar Menu -->
+            <nav class="mt-2">
+                <ul class="nav nav-pills nav-sidebar flex-column" data-widget="treeview" role="menu" data-accordion="false">
+                    <!-- TỔNG QUAN -->
+                    <li class="nav-header">TỔNG QUAN</li>
+                    <li class="nav-item">
+                        <a href="{{ url_for('main.dashboard') }}" class="nav-link {% if active_page == 'dashboard' %}active{% endif %}">
+                            <i class="nav-icon fas fa-tachometer-alt"></i>
+                            <p>Bảng điều khiển</p>
+                        </a>
+                    </li>
+
+                    <!-- GIÁM SÁT -->
+                    <li class="nav-header">GIÁM SÁT</li>
+                    <li class="nav-item">
+                        <a href="{{ url_for('main.monitor') }}" class="nav-link {% if active_page == 'monitor' %}active{% endif %}">
+                            <i class="nav-icon fas fa-video"></i>
+                            <p>Giám sát trực tiếp</p>
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a href="{{ url_for('floorplan.floorplan') }}" class="nav-link {% if active_page == 'floorplan' %}active{% endif %}">
+                            <i class="nav-icon fas fa-map-marked-alt"></i>
+                            <p>
+                                Bản đồ phòng máy
+                                <span class="badge badge-danger right" id="fp-sidebar-badge" style="display:none;">!</span>
+                            </p>
+                        </a>
+                    </li>
+                    {% if current_user.role == 'admin' %}
+                    <li class="nav-item">
+                        <a href="{{ url_for('main.roi') }}" class="nav-link {% if active_page == 'roi' %}active{% endif %}">
+                            <i class="nav-icon fas fa-vector-square"></i>
+                            <p>Cấu hình vùng ROI</p>
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a href="{{ url_for('main.dataset_page') }}" class="nav-link {% if active_page == 'dataset' %}active{% endif %}">
+                            <i class="nav-icon fas fa-images"></i>
+                            <p>Quản lý Dataset AI</p>
+                        </a>
+                    </li>
+                    {% endif %}
+
+                    <!-- VẬN HÀNH -->
+                    <li class="nav-header">VẬN HÀNH</li>
+                    <li class="nav-item">
+                        <a href="{{ url_for('main.alerts') }}" class="nav-link {% if active_page == 'alerts' %}active{% endif %}">
+                            <i class="nav-icon fas fa-bell"></i>
+                            <p>
+                                Quản lý cảnh báo
+                                <span class="badge badge-danger right" id="sidebar-alert-badge" style="display: none;">0</span>
+                            </p>
+                        </a>
+                    </li>
+                    {% if current_user.role == 'admin' %}
+                    <li class="nav-item">
+                        <a href="{{ url_for('main.iot') }}" class="nav-link {% if active_page == 'iot' %}active{% endif %}">
+                            <i class="nav-icon fas fa-microchip"></i>
+                            <p>Thiết bị ESP32</p>
+                        </a>
+                    </li>
+                    {% endif %}
+
+                    <!-- PHÂN TÍCH -->
+                    <li class="nav-header">PHÂN TÍCH</li>
+                    <li class="nav-item">
+                        <a href="{{ url_for('main.statistics') }}" class="nav-link {% if active_page == 'statistics' %}active{% endif %}">
+                            <i class="nav-icon fas fa-chart-bar"></i>
+                            <p>Thống kê & Biểu đồ</p>
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a href="{{ url_for('main.reports') }}" class="nav-link {% if active_page == 'reports' %}active{% endif %}">
+                            <i class="nav-icon fas fa-file-pdf"></i>
+                            <p>Xuất báo cáo</p>
+                        </a>
+                    </li>
+
+                    <!-- QUẢN TRỊ -->
+                    {% if current_user.role == 'admin' %}
+                    <li class="nav-header">QUẢN TRỊ DANH MỤC</li>
+                    <li class="nav-item">
+                        <a href="{{ url_for('room.index') }}" class="nav-link {% if active_page == 'rooms' %}active{% endif %}">
+                            <i class="nav-icon fas fa-building"></i>
+                            <p>Phòng máy</p>
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a href="{{ url_for('camera.index') }}" class="nav-link {% if active_page == 'cameras' %}active{% endif %}">
+                            <i class="nav-icon fas fa-video"></i>
+                            <p>Camera</p>
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a href="{{ url_for('computer.index') }}" class="nav-link {% if active_page == 'computers' %}active{% endif %}">
+                            <i class="nav-icon fas fa-desktop"></i>
+                            <p>Máy tính</p>
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a href="{{ url_for('iot_device.index') }}" class="nav-link {% if active_page == 'iot_devices' %}active{% endif %}">
+                            <i class="nav-icon fas fa-microchip"></i>
+                            <p>Thiết bị IoT</p>
+                        </a>
+                    </li>
+
+                    <li class="nav-header">QUẢN TRỊ HỆ THỐNG</li>
+                    <li class="nav-item">
+                        <a href="{{ url_for('main.accounts') }}" class="nav-link {% if active_page == 'accounts' %}active{% endif %}">
+                            <i class="nav-icon fas fa-users-cog"></i>
+                            <p>Quản lý tài khoản</p>
+                        </a>
+                    </li>
+                    {% endif %}
+
+                    <!-- HỆ THỐNG -->
+                    {% if current_user.role == 'admin' %}
+                    <li class="nav-header">HỆ THỐNG</li>
+                    <li class="nav-item">
+                        <a href="{{ url_for('main.settings') }}" class="nav-link {% if active_page == 'settings' %}active{% endif %}">
+                            <i class="nav-icon fas fa-sliders-h"></i>
+                            <p>Cấu hình hệ thống</p>
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a href="{{ url_for('main.audit_logs') }}" class="nav-link {% if active_page == 'audit_logs' %}active{% endif %}">
+                            <i class="nav-icon fas fa-history"></i>
+                            <p>Nhật ký hệ thống</p>
+                        </a>
+                    </li>
+                    {% endif %}
+                </ul>
+            </nav>
+        </div>
+    </aside>
+
+    <!-- ═══════════════════════════════════════════
+         CONTENT WRAPPER
+         ═══════════════════════════════════════════ -->
+    <div class="content-wrapper">
+        <!-- Content Header (Page header) -->
+        <div class="content-header">
+            <div class="container-fluid">
+                <div class="row mb-2">
+                    <div class="col-sm-6">
+                        <h1 class="m-0 font-weight-bold text-navy">{% block header_title %}Hệ Thống Giám Sát{% endblock %}</h1>
+                    </div>
+                    <div class="col-sm-6">
+                        <ol class="breadcrumb float-sm-right">
+                            <li class="breadcrumb-item"><a href="{{ url_for('main.dashboard') }}">Home</a></li>
+                            <li class="breadcrumb-item active">{% block title_sub %}VIU Lab Monitor{% endblock %}</li>
+                        </ol>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main content -->
+        <section class="content">
+            <div class="container-fluid">
+                <!-- Flash messages -->
+                {% with messages = get_flashed_messages(with_categories=true) %}
+                    {% if messages %}
+                        {% for category, message in messages %}
+                            <div class="alert alert-{{ 'danger' if category == 'error' else category }} alert-dismissible fade show" role="alert">
+                                <strong>Thông báo:</strong> {{ message }}
+                                <button type="button" class="close" data-dismiss="alert" aria-label="Close">
+                                    <span aria-hidden="true">&times;</span>
+                                </button>
+                            </div>
+                        {% endfor %}
+                    {% endif %}
+                {% endwith %}
+
+                <!-- Content Block -->
+                {% block content %}{% endblock %}
+            </div>
+        </section>
+    </div>
+
+    <!-- ═══════════════════════════════════════════
+         FOOTER
+         ═══════════════════════════════════════════ -->
+    <footer class="main-footer text-sm">
+        <div class="float-right d-none d-sm-inline">
+            Khoa CNTT - ĐH Công nghiệp Việt – Hung
+        </div>
+        <strong>Đồ án tốt nghiệp &copy; 2026 <a href="#">VIU Lab Monitor</a>.</strong> All rights reserved. v3.0
+    </footer>
+</div>
+
+<!-- ═══════════════════════════════════════════
+     SCRIPTS
+     ═══════════════════════════════════════════ -->
+<!-- jQuery -->
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<!-- Bootstrap 4 -->
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/js/bootstrap.bundle.min.js"></script>
+<!-- AdminLTE App -->
+<script src="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/js/adminlte.min.js"></script>
+
+<script>
+    // Lấy camera ID đầu tiên từ DB
+    let _baseCamId = 1;
+    $.ajax({ url: '/api/cameras', success: function(cams) { if (cams && cams.length > 0) _baseCamId = cams[0].id; } });
+
+    // Định kỳ lấy số lượng cảnh báo "pending" để cập nhật badge sidebar và navbar status
+    function fetchSidebarStatus() {
+        $.ajax({
+            url: '/camera_status/' + _baseCamId,
+            method: 'GET',
+            success: function(data) {
+                // Cập nhật trạng thái kết nối trên thanh navbar
+                var topDot = $('#top-nav-status-dot');
+                var topText = $('#top-nav-status-text');
+                if (data.is_online) {
+                    topDot.attr('class', 'connection-dot bg-success-dot');
+                    topText.text('Hệ thống ổn định');
+                } else {
+                    topDot.attr('class', 'connection-dot bg-warning-dot');
+                    topText.text('Mất kết nối camera');
+                }
+            }
+        });
+
+        // Đếm số lượng event pending thực tế từ API để hiện badge đỏ
+        $.ajax({
+            url: '/api/events/count',  // Lấy count thông qua route API
+            method: 'GET',
+            success: function(data) {
+                var badge = $('#sidebar-alert-badge');
+                var fpBadge = $('#fp-sidebar-badge');
+                var count = data.new || 0;
+                if (count > 0) {
+                    badge.text(count).show();
+                    fpBadge.show();  // Hiện dấu ! trên link Bản đồ phòng máy
+                } else {
+                    badge.hide();
+                    fpBadge.hide();
+                }
+            }
+        });
+    }
+
+    $(document).ready(function() {
+        fetchSidebarStatus();
+        setInterval(fetchSidebarStatus, 3000);
+    });
+</script>
+{% block extra_js %}{% endblock %}
+</body>
+</html>

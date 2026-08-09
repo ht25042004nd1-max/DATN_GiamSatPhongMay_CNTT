@@ -1,0 +1,278 @@
+{% extends "base.html" %}
+{% block title %}Quản lý Thiết bị IoT — Lab Monitor{% endblock %}
+{% block header_title %}Quản lý Thiết bị IoT{% endblock %}
+{% block title_sub %}IoT Device Management{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title"><i class="fas fa-microchip mr-2 text-success"></i>Danh sách Thiết bị IoT</h3>
+                <div class="card-tools">
+                    <button class="btn btn-success btn-sm" data-toggle="modal" data-target="#modalAddIoT">
+                        <i class="fas fa-plus"></i> Thêm Thiết bị
+                    </button>
+                </div>
+            </div>
+            <div class="card-body table-responsive p-0">
+                <table class="table table-hover table-striped text-nowrap">
+                    <thead class="thead-dark">
+                        <tr>
+                            <th>ID</th>
+                            <th>Tên Thiết bị</th>
+                            <th>Phòng máy</th>
+                            <th>Bo Mạch</th>
+                            <th>Giao Thức</th>
+                            <th>Địa chỉ IP</th>
+                            <th>Trạng thái</th>
+                            <th>Hành động</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for dev in devices %}
+                        <tr id="row-iot-{{ dev.id }}">
+                            <td>{{ dev.id }}</td>
+                            <td><strong>{{ dev.name }}</strong></td>
+                            <td>{{ dev.room.name if dev.room else '-' }}</td>
+                            <td><span class="badge badge-primary"><i class="fas fa-microchip mr-1"></i>{{ dev.board_type or 'ESP32' }}</span></td>
+                            <td><span class="badge badge-info">{{ dev.protocol or 'HTTP' }}</span></td>
+                            <td>{{ dev.ip_address or '-' }}</td>
+                            <td>
+                                {% if dev.status == 'online' %}
+                                <span class="badge badge-success">Online</span>
+                                {% elif dev.status == 'error' %}
+                                <span class="badge badge-danger">Lỗi</span>
+                                {% else %}
+                                <span class="badge badge-secondary">Offline</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <button class="btn btn-sm btn-info" title="Sửa"
+                                    onclick="openEditIoT({{ dev.id }}, '{{ dev.name }}', {{ dev.room_id }}, '{{ dev.device_type }}', '{{ dev.ip_address or '' }}', '{{ dev.status }}', '{{ dev.board_type or 'ESP32' }}', '{{ dev.protocol or 'HTTP' }}')">
+                                    <i class="fas fa-edit"></i>
+                                </button>
+                                <button class="btn btn-sm btn-danger" title="Xóa" onclick="deleteIoT({{ dev.id }}, '{{ dev.name }}')">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="7" class="text-center text-muted py-4"><i class="fas fa-microchip fa-2x mb-2"></i><br>Chưa có thiết bị IoT nào.</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Thêm IoT -->
+<div class="modal fade" id="modalAddIoT" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-success text-white">
+                <h5 class="modal-title"><i class="fas fa-plus mr-2"></i>Thêm Thiết bị IoT mới</h5>
+                <button type="button" class="close text-white" data-dismiss="modal"><span>&times;</span></button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>Tên thiết bị <span class="text-danger">*</span></label>
+                    <input type="text" id="add-iot-name" class="form-control" placeholder="VD: ESP32 Phòng A">
+                </div>
+                <div class="form-group">
+                    <label>Phòng máy <span class="text-danger">*</span></label>
+                    <select id="add-iot-room" class="form-control">
+                        <option value="">-- Chọn phòng --</option>
+                        {% for r in rooms %}
+                        <option value="{{ r.id }}">{{ r.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="row">
+                    <div class="col-md-6 form-group">
+                        <label>Loại Bo Mạch <span class="text-danger">*</span></label>
+                        <select id="add-iot-board" class="form-control">
+                            <option value="ESP32">ESP32 (Vi điều khiển IoT)</option>
+                            <option value="TCL-508L">TCL-508L (Board Giám sát)</option>
+                            <option value="HY-LandTiger V2.0">HY-LandTiger V2.0 (LPC1768)</option>
+                        </select>
+                    </div>
+                    <div class="col-md-6 form-group">
+                        <label>Giao Thức Truyền Thông</label>
+                        <select id="add-iot-protocol" class="form-control">
+                            <option value="HTTP">HTTP REST API</option>
+                            <option value="MQTT">MQTT Broker</option>
+                            <option value="TCP_Socket">TCP/IP Serial Socket</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Loại thiết bị <span class="text-danger">*</span></label>
+                    <select id="add-iot-type" class="form-control">
+                        <option value="esp32">Bo mạch IoT Gateway</option>
+                        <option value="sensor">Cảm biến Môi trường</option>
+                        <option value="relay">Relay Điều khiển</option>
+                        <option value="led">LED / Đèn Cảnh báo</option>
+                        <option value="buzzer">Buzzer / Còi hú</option>
+                        <option value="other">Khác</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Địa chỉ IP</label>
+                    <input type="text" id="add-iot-ip" class="form-control" placeholder="192.168.1.xxx">
+                </div>
+                <div class="alert alert-danger d-none mt-2" id="add-iot-error"></div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" data-dismiss="modal">Hủy</button>
+                <button class="btn btn-success" id="btn-add-iot" onclick="submitAddIoT()">
+                    <i class="fas fa-save mr-1"></i>Lưu
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Sửa IoT -->
+<div class="modal fade" id="modalEditIoT" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-info text-white">
+                <h5 class="modal-title"><i class="fas fa-edit mr-2"></i>Sửa thông tin Thiết bị IoT</h5>
+                <button type="button" class="close text-white" data-dismiss="modal"><span>&times;</span></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="edit-iot-id">
+                <div class="form-group">
+                    <label>Tên thiết bị <span class="text-danger">*</span></label>
+                    <input type="text" id="edit-iot-name" class="form-control">
+                </div>
+                <div class="form-group">
+                    <label>Phòng máy <span class="text-danger">*</span></label>
+                    <select id="edit-iot-room" class="form-control">
+                        {% for r in rooms %}
+                        <option value="{{ r.id }}">{{ r.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="row">
+                    <div class="col-md-6 form-group">
+                        <label>Loại Bo Mạch</label>
+                        <select id="edit-iot-board" class="form-control">
+                            <option value="ESP32">ESP32</option>
+                            <option value="TCL-508L">TCL-508L</option>
+                            <option value="HY-LandTiger V2.0">HY-LandTiger V2.0</option>
+                        </select>
+                    </div>
+                    <div class="col-md-6 form-group">
+                        <label>Giao Thức</label>
+                        <select id="edit-iot-protocol" class="form-control">
+                            <option value="HTTP">HTTP REST API</option>
+                            <option value="MQTT">MQTT Broker</option>
+                            <option value="TCP_Socket">TCP/IP Serial Socket</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Loại thiết bị <span class="text-danger">*</span></label>
+                    <select id="edit-iot-type" class="form-control">
+                        <option value="esp32">Bo mạch IoT Gateway</option>
+                        <option value="sensor">Cảm biến Môi trường</option>
+                        <option value="relay">Relay Điều khiển</option>
+                        <option value="led">LED / Đèn Cảnh báo</option>
+                        <option value="buzzer">Buzzer / Còi hú</option>
+                        <option value="other">Khác</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Địa chỉ IP</label>
+                    <input type="text" id="edit-iot-ip" class="form-control">
+                </div>
+                <div class="form-group">
+                    <label>Trạng thái</label>
+                    <select id="edit-iot-status" class="form-control">
+                        <option value="offline">Offline</option>
+                        <option value="online">Online</option>
+                        <option value="error">Lỗi</option>
+                    </select>
+                </div>
+                <div class="alert alert-danger d-none mt-2" id="edit-iot-error"></div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" data-dismiss="modal">Hủy</button>
+                <button class="btn btn-info" onclick="submitEditIoT()"><i class="fas fa-save mr-1"></i>Cập nhật</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function submitAddIoT() {
+    const name = $('#add-iot-name').val().trim();
+    const room_id = $('#add-iot-room').val();
+    const device_type = $('#add-iot-type').val();
+    const board_type = $('#add-iot-board').val();
+    const protocol = $('#add-iot-protocol').val();
+
+    if (!name || !room_id) { showError('add-iot-error', 'Vui lòng điền đầy đủ tên và phòng'); return; }
+    $('#btn-add-iot').prop('disabled', true).html('<i class="fas fa-spinner fa-spin mr-1"></i>Đang lưu...');
+    $.ajax({
+        url: '/api/iot_devices', method: 'POST', contentType: 'application/json',
+        data: JSON.stringify({ name, room_id: parseInt(room_id), device_type, board_type, protocol, ip_address: $('#add-iot-ip').val().trim() || null }),
+        success: () => location.reload(),
+        error: (xhr) => { showError('add-iot-error', xhr.responseJSON?.error || 'Lỗi'); $('#btn-add-iot').prop('disabled', false).html('<i class="fas fa-save mr-1"></i>Lưu'); }
+    });
+}
+
+function openEditIoT(id, name, room_id, device_type, ip, status, board_type, protocol) {
+    $('#edit-iot-id').val(id); $('#edit-iot-name').val(name);
+    $('#edit-iot-room').val(room_id); $('#edit-iot-type').val(device_type);
+    $('#edit-iot-ip').val(ip); $('#edit-iot-status').val(status);
+    $('#edit-iot-board').val(board_type || 'ESP32'); $('#edit-iot-protocol').val(protocol || 'HTTP');
+    $('#edit-iot-error').addClass('d-none');
+    $('#modalEditIoT').modal('show');
+}
+
+function submitEditIoT() {
+    const id = $('#edit-iot-id').val();
+    const name = $('#edit-iot-name').val().trim();
+    if (!name) { showError('edit-iot-error', 'Tên không được để trống'); return; }
+    $.ajax({
+        url: '/api/iot_devices/' + id, method: 'PUT', contentType: 'application/json',
+        data: JSON.stringify({ 
+            name, 
+            room_id: parseInt($('#edit-iot-room').val()), 
+            device_type: $('#edit-iot-type').val(), 
+            board_type: $('#edit-iot-board').val(),
+            protocol: $('#edit-iot-protocol').val(),
+            ip_address: $('#edit-iot-ip').val().trim() || null, 
+            status: $('#edit-iot-status').val() 
+        }),
+        success: () => location.reload(),
+        error: (xhr) => showError('edit-iot-error', xhr.responseJSON?.error || 'Lỗi')
+    });
+}
+
+function deleteIoT(id, name) {
+    if (!confirm(`Xóa thiết bị IoT "${name}"?`)) return;
+    $.ajax({
+        url: '/api/iot_devices/' + id, method: 'DELETE',
+        success: () => { $('#row-iot-' + id).remove(); toastr.success('Đã xóa ' + name); },
+        error: (xhr) => toastr.error(xhr.responseJSON?.message || 'Lỗi')
+    });
+}
+
+function showError(elemId, msg) { $('#' + elemId).text(msg).removeClass('d-none'); }
+
+$('#modalAddIoT').on('hidden.bs.modal', function() {
+    $('#add-iot-name, #add-iot-ip').val(''); $('#add-iot-room').val(''); $('#add-iot-type').val('esp32');
+    $('#add-iot-error').addClass('d-none');
+    $('#btn-add-iot').prop('disabled', false).html('<i class="fas fa-save mr-1"></i>Lưu');
+});
+</script>
+{% endblock %}

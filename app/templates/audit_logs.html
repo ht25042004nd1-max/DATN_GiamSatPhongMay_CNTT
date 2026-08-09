@@ -1,0 +1,131 @@
+{% extends "base.html" %}
+{% block title %}Nhật ký hoạt động — Lab Monitor{% endblock %}
+{% block header_title %}Nhật ký hoạt động{% endblock %}
+{% block title_sub %}Audit Logs{% endblock %}
+
+{% block extra_css %}
+<!-- DataTables -->
+<link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap4.min.css">
+<style>
+    .log-details {
+        max-width: 300px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        cursor: pointer;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title"><i class="fas fa-history text-muted"></i> Lịch sử hoạt động hệ thống</h3>
+                <div class="card-tools">
+                    <button type="button" class="btn btn-tool" data-card-widget="collapse" title="Thu gọn">
+                        <i class="fas fa-minus"></i>
+                    </button>
+                </div>
+            </div>
+            <!-- /.card-header -->
+            <div class="card-body">
+                <table id="auditTable" class="table table-bordered table-striped table-hover">
+                    <thead>
+                        <tr>
+                            <th style="width: 15%">Thời gian</th>
+                            <th style="width: 15%">Tài khoản</th>
+                            <th style="width: 10%">IP</th>
+                            <th style="width: 20%">Hành động</th>
+                            <th style="width: 15%">Đối tượng</th>
+                            <th style="width: 25%">Chi tiết</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for log in logs %}
+                        <tr>
+                            <td data-sort="{{ log.created_at.strftime('%Y%m%d%H%M%S') }}">
+                                {{ log.created_at.strftime('%d/%m/%Y %H:%M:%S') }}
+                            </td>
+                            <td>
+                                {% if log.user %}
+                                    <span class="badge badge-info">{{ log.user.username }}</span>
+                                {% else %}
+                                    <span class="badge badge-secondary">Hệ thống</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <small class="text-muted">{{ log.ip_address or 'N/A' }}</small>
+                            </td>
+                            <td>
+                                <strong>{{ log.action }}</strong>
+                            </td>
+                            <td>
+                                {% if log.target_type %}
+                                    <span class="badge badge-primary">{{ log.target_type }}</span>
+                                    {% if log.target_id %}
+                                        <small>#{{ log.target_id }}</small>
+                                    {% endif %}
+                                {% else %}
+                                    -
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if log.details %}
+                                    <div class="log-details" title="{{ log.details }}">
+                                        <code>{{ log.details }}</code>
+                                    </div>
+                                {% else %}
+                                    -
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <!-- /.card-body -->
+        </div>
+        <!-- /.card -->
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<!-- DataTables & Plugins -->
+<script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
+<script src="https://cdn.datatables.net/1.13.6/js/dataTables.bootstrap4.min.js"></script>
+
+<script>
+    $(function () {
+        $('#auditTable').DataTable({
+            "paging": true,
+            "lengthChange": true,
+            "searching": true,
+            "ordering": true,
+            "info": true,
+            "autoWidth": false,
+            "responsive": true,
+            "order": [[0, "desc"]], // Sắp xếp theo cột đầu tiên (thời gian) giảm dần
+            "language": {
+                "sProcessing": "Đang xử lý...",
+                "sLengthMenu": "Xem _MENU_ mục",
+                "sZeroRecords": "Không tìm thấy dòng nào phù hợp",
+                "sInfo": "Đang xem _START_ đến _END_ trong tổng số _TOTAL_ mục",
+                "sInfoEmpty": "Đang xem 0 đến 0 trong tổng số 0 mục",
+                "sInfoFiltered": "(được lọc từ _MAX_ mục)",
+                "sInfoPostFix": "",
+                "sSearch": "Tìm kiếm:",
+                "sUrl": "",
+                "oPaginate": {
+                    "sFirst": "Đầu",
+                    "sPrevious": "Trước",
+                    "sNext": "Tiếp",
+                    "sLast": "Cuối"
+                }
+            }
+        });
+    });
+</script>
+{% endblock %}
