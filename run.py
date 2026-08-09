@@ -5,12 +5,6 @@
 import os
 import sys
 
-# Cấu hình encoding UTF-8 cho stdout/stderr (tránh lỗi trên Windows cmd)
-if sys.stdout.encoding != 'utf-8':
-    sys.stdout.reconfigure(encoding='utf-8', errors='replace')
-if sys.stderr.encoding != 'utf-8':
-    sys.stderr.reconfigure(encoding='utf-8', errors='replace')
-
 from dotenv import load_dotenv
 
 # Tải biến môi trường từ file .env

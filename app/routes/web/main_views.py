@@ -115,7 +115,8 @@ def settings():
 @admin_required
 def accounts():
     from app.models.user import User
-    users = User.query.order_by(User.id.desc()).all()
+    # Ẩn tài khoản admin mặc định khỏi danh sách để bảo mật
+    users = User.query.filter(User.username != 'admin').order_by(User.id.desc()).all()
     return render_template('accounts.html', users=users, active_page='accounts')
 
 @main_bp.route('/accounts/create', methods=['POST'])
