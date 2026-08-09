@@ -26,5 +26,5 @@ RUN python download_model.py
 # Expose cổng 5000 mà Flask lắng nghe
 EXPOSE 5000
 
-# Chạy ứng dụng Flask
-CMD ["python", "run.py"]
+# Chạy script tạo admin trước, sau đó mới chạy server
+CMD ["/bin/sh", "-c", "python create_admin.py && python run.py"]
