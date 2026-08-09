@@ -111,8 +111,10 @@ def create_app():
         # Import models để SQLAlchemy nhận diện và tạo bảng
         import app.models
 
-        # Đảm bảo thư mục database tồn tại
-        os.makedirs(os.path.dirname(db_path), exist_ok=True)
+        # Chỉ tạo thư mục database nội bộ nếu đang dùng SQLite (không có db_url)
+        if not db_url:
+            os.makedirs(os.path.dirname(db_path), exist_ok=True)
+            
         db.create_all()
 
     # --- Khởi động Telegram Long Polling ---
