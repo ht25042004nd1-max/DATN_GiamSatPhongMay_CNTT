@@ -25,5 +25,6 @@ RUN python download_model.py
 
 # Bỏ EXPOSE 5000 vì Render sẽ tự động gán biến môi trường PORT và quản lý port mạng
 
-# Chạy script tạo admin lần đầu, sau đó chạy server Flask bằng Gunicorn với đa luồng (--threads 10) để hỗ trợ Streaming Video
-CMD ["/bin/sh", "-c", "python create_admin.py && gunicorn --threads 10 --bind 0.0.0.0:$PORT run:app"]
+# Chạy script tạo admin lần đầu, sau đó chạy server Flask bằng Gunicorn
+# worker_class=gthread: hỗ trợ blocking connections (MJPEG video stream) + xử lý API song song
+CMD ["/bin/sh", "-c", "python create_admin.py && gunicorn --worker-class gthread --workers 1 --threads 20 --timeout 120 --bind 0.0.0.0:$PORT run:app"]

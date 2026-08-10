@@ -92,12 +92,19 @@ class CameraService:
         print(f"[Camera] Nguon: {self.source_name} | Online: {self.is_online} | AI: {self.pose_enabled}")
 
     def _try_open(self, source):
-        # Trên Windows, nếu dùng port 0 mà bị kẹt, CAP_DSHOW sẽ ép mở luồng
+        # CAP_DSHOW chỉ có trên Windows; trên Linux (Render) phải dùng backend mặc định
+        import platform
+        is_win = platform.system() == 'Windows'
+
         if isinstance(source, int) or (isinstance(source, str) and source.isdigit()):
-            cap = cv2.VideoCapture(int(source), cv2.CAP_DSHOW)
+            src_int = int(source)
+            if is_win:
+                cap = cv2.VideoCapture(src_int, cv2.CAP_DSHOW)
+            else:
+                cap = cv2.VideoCapture(src_int)
         else:
             cap = cv2.VideoCapture(source)
-            
+
         if cap.isOpened():
             self.cap = cap
             if isinstance(source, int) or (isinstance(source, str) and source.isdigit()):
@@ -274,7 +281,6 @@ class CameraService:
             _, buf = cv2.imencode('.jpg', src, [cv2.IMWRITE_JPEG_QUALITY, 80])
             return buf.tobytes()
 
-    # ─── Trạng thái ─────────────────────────────────────────
     def get_status(self):
         """Trả về dict trạng thái camera + kết quả pose."""
         with self.lock:
@@ -295,6 +301,84 @@ class CameraService:
         }
 
 
+class ClientCamera(CameraService):
+    """Camera ảo nhận luồng frame từ phía client (trình duyệt) thông qua API."""
+    def __init__(self):
+        super().__init__()
+        self.new_frame_event = threading.Event()
+
+    def start(self, source=0, fallback_video=None, enable_pose=True):
+        if self.running:
+            return
+
+        if enable_pose:
+            try:
+                from app.services.pose_analyzer import PoseAnalyzer
+                self._pose = PoseAnalyzer()
+                self.pose_enabled = True
+                print("[ClientCamera] MediaPipe Pose: DA BAT")
+            except Exception as e:
+                print(f"[ClientCamera] MediaPipe khoi tao that bai: {e}")
+                self.pose_enabled = False
+
+        self.is_online = True
+        self.source_name = "Thiết bị Client (Điện thoại/Laptop)"
+        self.running = True
+        self._thread = threading.Thread(target=self._loop_client, daemon=True)
+        self._thread.start()
+        print(f"[ClientCamera] Da khoi dong. Cho du lieu tu client.")
+
+    def update_frame(self, frame_bgr):
+        """Hàm này được gọi từ API khi có frame gửi lên."""
+        with self.lock:
+            self.frame = frame_bgr
+        self.new_frame_event.set()
+
+    def _loop_client(self):
+        t_prev = time.time()
+        frame_cnt = 0
+        while self.running:
+            if not self.new_frame_event.wait(timeout=2.0):
+                self.fps = 0.0
+                continue
+            
+            self.new_frame_event.clear()
+            
+            with self.lock:
+                frame = self.frame.copy() if self.frame is not None else None
+                
+            if frame is None:
+                continue
+
+            frame_cnt += 1
+            t_now = time.time()
+            if t_now - t_prev >= 1.0:
+                self.fps = round(frame_cnt / (t_now - t_prev), 1)
+                frame_cnt = 0
+                t_prev = t_now
+
+            # Xử lý AI Pose trên frame
+            if self.pose_enabled and self._pose:
+                processed = self._pose.process_frame(frame.copy())
+                result = self._pose.get_result()
+
+                try:
+                    from app.services.alert_engine import alert_engine
+                    hip_norm = result.get('hip_norm')
+                    alert_engine.process_frame(result, hip_norm)
+                except Exception:
+                    pass
+            else:
+                processed = frame.copy()
+                result = {"pose": "AI off", "confidence": 0.0,
+                          "is_detected": False, "persons": {}}
+
+            with self.lock:
+                self.processed = processed
+                self.pose_result = result
+
+
+
 class CameraManager:
     """Quản lý nhiều luồng camera cùng lúc (tránh rò rỉ bộ nhớ)."""
     def __init__(self):
@@ -304,7 +388,10 @@ class CameraManager:
     def get_camera(self, camera_id, source=0, fallback_video=None, enable_pose=True):
         with self._lock:
             if camera_id not in self._cameras:
-                cam_service = CameraService()
+                if str(source).lower() == 'client_camera':
+                    cam_service = ClientCamera()
+                else:
+                    cam_service = CameraService()
                 cam_service.start(source=source, fallback_video=fallback_video, enable_pose=enable_pose)
                 self._cameras[camera_id] = cam_service
             return self._cameras[camera_id]
