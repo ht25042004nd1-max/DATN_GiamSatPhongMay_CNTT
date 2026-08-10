@@ -105,6 +105,8 @@ class CameraService:
         else:
             # IP Camera, RTSP, hoặc đường dẫn video file
             src_str = str(source).strip()
+            if src_str.lower().startswith('rtsp://'):
+                os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = "rtsp_transport;tcp"
             cap = cv2.VideoCapture(src_str)
 
         if cap.isOpened():
