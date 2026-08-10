@@ -66,6 +66,18 @@
                 video: { facingMode: { ideal: 'environment' } }, 
                 audio: false 
             });
+            // Lắng nghe sự kiện trước khi gán stream để không bị miss event
+            videoElement.onloadedmetadata = () => {
+                // Resize canvas để ảnh tải lên nhẹ bớt
+                const ratio = videoElement.videoWidth / videoElement.videoHeight;
+                canvasElement.width = 640;
+                canvasElement.height = 640 / ratio;
+
+                // Bắt đầu gửi frame liên tục (5 fps = 200ms)
+                if (streamInterval) clearInterval(streamInterval);
+                streamInterval = setInterval(sendFrameToServer, 200);
+            };
+
             videoElement.srcObject = stream;
             currentStream = stream;
             
@@ -81,17 +93,6 @@
             statusMsg.className = 'alert alert-info mt-3';
             statusMsg.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Đang phát dữ liệu lên Server...';
             statusMsg.style.display = 'block';
-
-            // Đợi video có kích thước để thiết lập canvas
-            videoElement.onloadedmetadata = () => {
-                // Resize canvas để ảnh tải lên nhẹ bớt (VD: 640x480 thay vì FullHD)
-                const ratio = videoElement.videoWidth / videoElement.videoHeight;
-                canvasElement.width = 640;
-                canvasElement.height = 640 / ratio;
-
-                // Bắt đầu gửi frame liên tục (5 fps = 200ms)
-                streamInterval = setInterval(sendFrameToServer, 200);
-            };
 
         } catch (err) {
             console.error("Lỗi khi truy cập camera:", err);
