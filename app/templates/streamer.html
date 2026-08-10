@@ -25,6 +25,11 @@
                         <div class="card-body text-center">
                             <p class="text-muted">Nhấn nút bên dưới để cấp quyền cho trình duyệt truy cập vào camera trên thiết bị của bạn. Hình ảnh sẽ liên tục được truyền về Server để AI phân tích.</p>
                             
+                            <div class="form-group text-left" id="camera-select-group" style="display: none; max-width: 600px; margin: 0 auto 15px auto;">
+                                <label for="camera-select">Chọn Camera:</label>
+                                <select id="camera-select" class="form-control"></select>
+                            </div>
+                            
                             <video id="client-video" autoplay playsinline muted style="width: 100%; max-width: 600px; background-color: #000; border-radius: 8px; margin-bottom: 20px;"></video>
                             <canvas id="capture-canvas" style="display: none;"></canvas>
 
@@ -51,9 +56,39 @@
     const startBtn = document.getElementById('start-camera');
     const stopBtn = document.getElementById('stop-camera');
     const statusMsg = document.getElementById('status-message');
+    const cameraSelectGroup = document.getElementById('camera-select-group');
+    const cameraSelect = document.getElementById('camera-select');
     
     let currentStream = null;
     let streamInterval = null;
+
+    // Tự động load danh sách camera nếu trình duyệt hỗ trợ
+    async function loadCameras() {
+        if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) return;
+        try {
+            // Yêu cầu quyền tạm thời để lấy tên camera đầy đủ
+            await navigator.mediaDevices.getUserMedia({video: true, audio: false}).then(s => s.getTracks().forEach(t => t.stop())).catch(e => {});
+            
+            const devices = await navigator.mediaDevices.enumerateDevices();
+            const videoDevices = devices.filter(device => device.kind === 'videoinput');
+            
+            if (videoDevices.length > 0) {
+                cameraSelect.innerHTML = '';
+                videoDevices.forEach((device, index) => {
+                    const option = document.createElement('option');
+                    option.value = device.deviceId;
+                    option.text = device.label || `Camera ${index + 1}`;
+                    cameraSelect.appendChild(option);
+                });
+                cameraSelectGroup.style.display = 'block';
+            }
+        } catch (err) {
+            console.warn("Không tải được danh sách camera:", err);
+        }
+    }
+    
+    // Khởi chạy khi load trang
+    loadCameras();
 
     startBtn.addEventListener('click', async () => {
         try {
@@ -62,14 +97,20 @@
             }
             
             let stream;
+            let constraints = { audio: false };
+            
+            // Nếu người dùng chọn camera cụ thể
+            if (cameraSelect.value) {
+                constraints.video = { deviceId: { exact: cameraSelect.value } };
+            } else {
+                constraints.video = { facingMode: { ideal: 'environment' } };
+            }
+
             try {
-                // Thử yêu cầu camera với ưu tiên camera sau
-                stream = await navigator.mediaDevices.getUserMedia({ 
-                    video: { facingMode: { ideal: 'environment' } }, 
-                    audio: false 
-                });
+                // Thử yêu cầu camera với cấu hình đã chọn
+                stream = await navigator.mediaDevices.getUserMedia(constraints);
             } catch (firstErr) {
-                console.warn("Không thể mở camera với facingMode, thử lại cấu hình mặc định...", firstErr);
+                console.warn("Không thể mở camera với cấu hình mong muốn, thử lại mặc định...", firstErr);
                 // Fallback: Mở bất kỳ camera nào có sẵn
                 stream = await navigator.mediaDevices.getUserMedia({ 
                     video: true, 
