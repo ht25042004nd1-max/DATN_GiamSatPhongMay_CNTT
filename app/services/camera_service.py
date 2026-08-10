@@ -103,7 +103,9 @@ class CameraService:
             else:
                 cap = cv2.VideoCapture(src_int)
         else:
-            cap = cv2.VideoCapture(source)
+            # IP Camera, RTSP, hoặc đường dẫn video file
+            src_str = str(source).strip()
+            cap = cv2.VideoCapture(src_str)
 
         if cap.isOpened():
             self.cap = cap
@@ -115,6 +117,14 @@ class CameraService:
                 cap.set(cv2.CAP_PROP_BUFFERSIZE,     2)   # giảm buffer lag
                 cap.set(cv2.CAP_PROP_AUTOFOCUS,      1)   # tự động lấy nét
                 self.source_name = f"Webcam #{source}"
+            else:
+                cap.set(cv2.CAP_PROP_BUFFERSIZE, 1) # Giảm lag tối đa cho IP stream
+                if str(source).startswith(('http://', 'https://')):
+                    self.source_name = f"IP Camera ({source})"
+                elif str(source).startswith('rtsp://'):
+                    self.source_name = f"RTSP Stream ({source})"
+                else:
+                    self.source_name = f"Video: {os.path.basename(str(source))}"
             return True
         cap.release()
         return False
@@ -124,69 +134,80 @@ class CameraService:
         """Thread chính: đọc frame → xử lý AI → lưu vào bộ nhớ."""
         t_prev     = time.time()
         frame_cnt  = 0
-
         consecutive_failures = 0
-        while self.running:
-            ret, frame = self.cap.read()
 
-            if not ret:
-                consecutive_failures += 1
-                if consecutive_failures > 30:
-                    print("[Camera] Mất kết nối camera liên tục. Chuyển sang Offline mode.")
-                    self.is_online = False
-                    self.source_name = "Offline"
-                    if self.cap:
-                        self.cap.release()
-                    self._loop_offline()
+        try:
+            while self.running:
+                if self.cap is None or not self.cap.isOpened():
                     break
-                
-                # Thử tua lại video (nếu là file)
+                ret, frame = self.cap.read()
+
+                if not ret:
+                    consecutive_failures += 1
+                    if consecutive_failures > 30:
+                        print("[Camera] Mất kết nối camera liên tục. Chuyển sang Offline mode.")
+                        self.is_online = False
+                        self.source_name = "Offline"
+                        if self.cap:
+                            self.cap.release()
+                        self._loop_offline()
+                        break
+                    
+                    # Thử tua lại video (nếu là file)
+                    try:
+                        self.cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+                    except Exception:
+                        pass
+                    time.sleep(0.1)
+                    continue
+
+                consecutive_failures = 0
+
+                frame_cnt += 1
+                t_now = time.time()
+                if t_now - t_prev >= 1.0:
+                    self.fps   = round(frame_cnt / (t_now - t_prev), 1)
+                    frame_cnt  = 0
+                    t_prev     = t_now
+
+                # ── Xử lý AI Pose trên frame ──
+                if self.pose_enabled and self._pose:
+                    # process_frame() vẽ skeleton + bounding box lên frame (in-place)
+                    try:
+                        processed = self._pose.process_frame(frame.copy())
+                        result    = self._pose.get_result()   # {pose, confidence, persons, ...}
+                    except Exception:
+                        processed = frame.copy()
+                        result = {"pose": "AI error", "confidence": 0.0, "is_detected": False, "persons": {}}
+
+                    # ── Gửi kết quả sang AlertEngine (v2: truyền persons dict đầy đủ) ──
+                    try:
+                        from app.services.alert_engine import alert_engine
+                        # AlertEngine v2 tự đọc result['persons']
+                        # Fallback hip_norm cho tương thích ngược
+                        hip_norm = result.get('hip_norm')
+                        alert_engine.process_frame(result, hip_norm)
+                    except Exception:
+                        pass
+                else:
+                    processed = frame.copy()
+                    result    = {"pose": "AI off", "confidence": 0.0,
+                                 "is_detected": False, "persons": {}}
+
+                with self.lock:
+                    self.frame       = frame
+                    self.processed   = processed
+                    self.pose_result = result
+
+                time.sleep(0.01)
+        except Exception as e:
+            print(f"[Camera] Thread _loop_read ket thuc an toan: {e}")
+        finally:
+            if self.cap:
                 try:
-                    self.cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+                    self.cap.release()
                 except Exception:
                     pass
-                time.sleep(0.1)
-                continue
-
-            consecutive_failures = 0
-
-            frame_cnt += 1
-            t_now = time.time()
-            if t_now - t_prev >= 1.0:
-                self.fps   = round(frame_cnt / (t_now - t_prev), 1)
-                frame_cnt  = 0
-                t_prev     = t_now
-
-            # ── Xử lý AI Pose trên frame ──
-            if self.pose_enabled and self._pose:
-                # process_frame() vẽ skeleton + bounding box lên frame (in-place)
-                processed = self._pose.process_frame(frame.copy())
-                result    = self._pose.get_result()   # {pose, confidence, persons, ...}
-
-                # ── Gửi kết quả sang AlertEngine (v2: truyền persons dict đầy đủ) ──
-                try:
-                    from app.services.alert_engine import alert_engine
-                    # AlertEngine v2 tự đọc result['persons']
-                    # Fallback hip_norm cho tương thích ngược
-                    hip_norm = result.get('hip_norm')
-                    alert_engine.process_frame(result, hip_norm)
-                except Exception:
-                    pass
-            else:
-                processed = frame.copy()
-                result    = {"pose": "AI off", "confidence": 0.0,
-                             "is_detected": False, "persons": {}}
-
-            with self.lock:
-                self.frame       = frame
-                self.processed   = processed
-                self.pose_result = result
-
-
-            time.sleep(0.01)
-
-        if self.cap:
-            self.cap.release()
 
     def _loop_offline(self):
         """Thread tạo frame đen khi không có camera."""
@@ -387,11 +408,26 @@ class CameraManager:
         
     def get_camera(self, camera_id, source=0, fallback_video=None, enable_pose=True):
         with self._lock:
+            existing = self._cameras.get(camera_id)
+            need_restart = False
+            if existing:
+                is_client = isinstance(existing, ClientCamera)
+                want_client = str(source).lower() == 'client_camera'
+                if is_client != want_client:
+                    need_restart = True
+                elif not is_client and getattr(existing, 'current_source', None) != str(source):
+                    need_restart = True
+
+                if need_restart:
+                    existing.stop()
+                    del self._cameras[camera_id]
+
             if camera_id not in self._cameras:
                 if str(source).lower() == 'client_camera':
                     cam_service = ClientCamera()
                 else:
                     cam_service = CameraService()
+                cam_service.current_source = str(source)
                 cam_service.start(source=source, fallback_video=fallback_video, enable_pose=enable_pose)
                 self._cameras[camera_id] = cam_service
             return self._cameras[camera_id]

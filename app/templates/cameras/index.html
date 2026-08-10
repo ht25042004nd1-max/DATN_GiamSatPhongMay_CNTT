@@ -1,59 +1,106 @@
 {% extends "base.html" %}
 {% block title %}Quản lý Camera — Lab Monitor{% endblock %}
 {% block header_title %}Quản lý Camera{% endblock %}
-{% block title_sub %}Camera Management{% endblock %}
+{% block title_sub %}Camera Management & Wireless Devices{% endblock %}
 
 {% block content %}
-<div class="row">
+<div class="row mb-3">
     <div class="col-12">
-        <div class="card">
-            <div class="card-header">
-                <h3 class="card-title"><i class="fas fa-video mr-2 text-primary"></i>Danh sách Camera</h3>
+        <div class="card card-outline card-navy shadow-sm">
+            <div class="card-header d-flex align-items-center justify-content-between">
+                <h3 class="card-title font-weight-bold mb-0">
+                    <i class="fas fa-video mr-2 text-primary"></i> Danh sách Camera Giám Sát Phòng Máy
+                </h3>
                 <div class="card-tools">
-                    <button class="btn btn-primary btn-sm" data-toggle="modal" data-target="#modalAddCamera">
-                        <i class="fas fa-plus"></i> Thêm Camera
+                    <button class="btn btn-primary btn-sm font-weight-bold shadow-sm" data-toggle="modal" data-target="#modalAddCamera">
+                        <i class="fas fa-plus mr-1"></i> Thêm Camera Mới
                     </button>
                 </div>
             </div>
             <div class="card-body table-responsive p-0">
-                <table class="table table-hover table-striped text-nowrap">
+                <table class="table table-hover table-striped text-nowrap align-middle">
                     <thead class="thead-dark">
                         <tr>
-                            <th>ID</th>
+                            <th style="width: 50px;">ID</th>
                             <th>Tên Camera</th>
                             <th>Phòng máy</th>
-                            <th>RTSP / Nguồn</th>
+                            <th>Nguồn Video / URL</th>
+                            <th>Kiểu Kết Nối</th>
                             <th>Trạng thái</th>
-                            <th>Hành động</th>
+                            <th class="text-center" style="width: 220px;">Thao Tác</th>
                         </tr>
                     </thead>
                     <tbody>
                         {% for cam in cameras %}
                         <tr id="row-cam-{{ cam.id }}">
-                            <td>{{ cam.id }}</td>
-                            <td><strong>{{ cam.name }}</strong></td>
-                            <td>{{ cam.room.name if cam.room else '-' }}</td>
-                            <td><code>{{ cam.rtsp_url or '-' }}</code></td>
+                            <td><b>#{{ cam.id }}</b></td>
                             <td>
-                                {% if cam.is_active %}
-                                <span class="badge badge-success">Hoạt động</span>
+                                <strong>{{ cam.name }}</strong>
+                            </td>
+                            <td>
+                                <span class="badge badge-light border">{{ cam.room.name if cam.room else '-' }}</span>
+                            </td>
+                            <td>
+                                <code>{{ cam.rtsp_url or '-' }}</code>
+                            </td>
+                            <td>
+                                {% if cam.rtsp_url == 'client_camera' %}
+                                <span class="badge badge-info"><i class="fas fa-mobile-alt mr-1"></i> Trạm phát Web</span>
+                                {% elif cam.rtsp_url and cam.rtsp_url.startswith('http') %}
+                                <span class="badge badge-primary"><i class="fas fa-wifi mr-1"></i> IP / Phone Stream</span>
+                                {% elif cam.rtsp_url and cam.rtsp_url.startswith('rtsp') %}
+                                <span class="badge badge-purple" style="background:#6f42c1; color:#fff;"><i class="fas fa-shield-alt mr-1"></i> RTSP Cam</span>
+                                {% elif cam.rtsp_url and cam.rtsp_url.isdigit() %}
+                                <span class="badge badge-secondary"><i class="fas fa-usb mr-1"></i> Webcam #{{ cam.rtsp_url }}</span>
                                 {% else %}
-                                <span class="badge badge-secondary">Tắt</span>
+                                <span class="badge badge-secondary">Tùy biến</span>
                                 {% endif %}
                             </td>
                             <td>
-                                <button class="btn btn-sm btn-info" title="Sửa"
+                                {% if cam.is_active %}
+                                <span class="badge badge-success"><i class="fas fa-check-circle mr-1"></i> Hoạt động</span>
+                                {% else %}
+                                <span class="badge badge-secondary"><i class="fas fa-ban mr-1"></i> Đã tắt</span>
+                                {% endif %}
+                            </td>
+                            <td class="text-center">
+                                <!-- Nút Xem thử Preview -->
+                                <button class="btn btn-sm btn-outline-primary" title="Xem thử Luồng Video Live"
+                                    onclick="openPreviewCam({{ cam.id }}, '{{ cam.name }}')">
+                                    <i class="fas fa-eye"></i> Xem
+                                </button>
+                                
+                                <!-- Nút Kiểm tra kết nối -->
+                                <button class="btn btn-sm btn-outline-success" title="Kiểm tra tín hiệu Camera"
+                                    id="btn-test-{{ cam.id }}" onclick="testCamConnection({{ cam.id }})">
+                                    <i class="fas fa-plug"></i> Test
+                                </button>
+
+                                <!-- Nút Mở Trạm phát (nếu là Client Cam) -->
+                                {% if cam.rtsp_url == 'client_camera' %}
+                                <a href="{{ url_for('main.streamer', camera_id=cam.id) }}" class="btn btn-sm btn-success" title="Mở Trạm Phát Thiết Bị" target="_blank">
+                                    <i class="fas fa-broadcast-tower"></i> Phát
+                                </a>
+                                {% endif %}
+
+                                <!-- Nút Sửa -->
+                                <button class="btn btn-sm btn-info" title="Chỉnh sửa cấu hình"
                                     onclick="openEditCam({{ cam.id }}, '{{ cam.name }}', {{ cam.room_id }}, '{{ cam.rtsp_url or '' }}', {{ cam.is_active | tojson }})">
                                     <i class="fas fa-edit"></i>
                                 </button>
-                                <button class="btn btn-sm btn-danger" title="Xóa" onclick="deleteCam({{ cam.id }}, '{{ cam.name }}')">
+
+                                <!-- Nút Xóa -->
+                                <button class="btn btn-sm btn-danger" title="Xóa Camera" onclick="deleteCam({{ cam.id }}, '{{ cam.name }}')">
                                     <i class="fas fa-trash"></i>
                                 </button>
                             </td>
                         </tr>
                         {% else %}
                         <tr>
-                            <td colspan="6" class="text-center text-muted py-4"><i class="fas fa-video-slash fa-2x mb-2"></i><br>Chưa có camera nào.</td>
+                            <td colspan="7" class="text-center text-muted py-4">
+                                <i class="fas fa-video-slash fa-3x mb-2 text-secondary"></i><br>
+                                Chưa có camera nào trong hệ thống. Nhấn "Thêm Camera Mới" để bắt đầu.
+                            </td>
                         </tr>
                         {% endfor %}
                     </tbody>
@@ -63,43 +110,116 @@
     </div>
 </div>
 
+<!-- Hướng dẫn nhanh các phương thức Camera Không Dây -->
+<div class="row">
+    <div class="col-md-4">
+        <div class="card card-outline card-info shadow-sm h-100">
+            <div class="card-header">
+                <h3 class="card-title font-weight-bold text-sm text-info"><i class="fas fa-mobile-alt mr-1"></i> 1. Dùng App Camera Điện Thoại</h3>
+            </div>
+            <div class="card-body text-xs text-muted">
+                Cài ứng dụng <b>IP Webcam</b> hoặc <b>DroidCam</b> trên điện thoại. Bật phát trong cùng WiFi và điền link IP vào camera:
+                <div class="p-1 bg-light border rounded mt-1 text-monospace text-dark font-weight-bold">
+                    http://192.168.1.X:8080/video
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card card-outline card-success shadow-sm h-100">
+            <div class="card-header">
+                <h3 class="card-title font-weight-bold text-sm text-success"><i class="fas fa-globe mr-1"></i> 2. Dùng Web Trạm Phát (Không cần App)</h3>
+            </div>
+            <div class="card-body text-xs text-muted">
+                Đặt nguồn là <code>client_camera</code>, sau đó mở link trạm phát trên trình duyệt điện thoại/laptop để truyền trực tiếp:
+                <div class="p-1 bg-light border rounded mt-1 text-monospace text-dark font-weight-bold">
+                    /streamer/&lt;camera_id&gt;
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card card-outline card-purple shadow-sm h-100" style="border-top-color: #6f42c1;">
+            <div class="card-header">
+                <h3 class="card-title font-weight-bold text-sm" style="color: #6f42c1;"><i class="fas fa-microchip mr-1"></i> 3. Module Nhúng ESP32-CAM / RTSP</h3>
+            </div>
+            <div class="card-body text-xs text-muted">
+                Dùng vi điều khiển ESP32-CAM hoặc Camera an ninh IP gia đình (Ezviz, Imou, Dahua) phát qua chuẩn MJPEG/RTSP:
+                <div class="p-1 bg-light border rounded mt-1 text-monospace text-dark font-weight-bold">
+                    http://192.168.1.X:81/stream
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- Modal Thêm Camera -->
 <div class="modal fade" id="modalAddCamera" tabindex="-1">
-    <div class="modal-dialog">
+    <div class="modal-dialog modal-lg">
         <div class="modal-content">
             <div class="modal-header bg-primary text-white">
-                <h5 class="modal-title"><i class="fas fa-plus mr-2"></i>Thêm Camera mới</h5>
+                <h5 class="modal-title font-weight-bold"><i class="fas fa-plus mr-2"></i>Thêm Camera Mới Vào Hệ Thống</h5>
                 <button type="button" class="close text-white" data-dismiss="modal"><span>&times;</span></button>
             </div>
             <div class="modal-body">
                 <div class="form-group">
-                    <label>Tên Camera <span class="text-danger">*</span></label>
-                    <input type="text" id="add-cam-name" class="form-control" placeholder="VD: Camera Cổng vào">
+                    <label class="font-weight-bold">Tên Camera <span class="text-danger">*</span></label>
+                    <input type="text" id="add-cam-name" class="form-control" placeholder="VD: Camera Bàn Máy 01, Camera Không Dây Điện Thoại">
                 </div>
                 <div class="form-group">
-                    <label>Phòng máy <span class="text-danger">*</span></label>
+                    <label class="font-weight-bold">Phòng máy <span class="text-danger">*</span></label>
                     <select id="add-cam-room" class="form-control">
-                        <option value="">-- Chọn phòng --</option>
+                        <option value="">-- Chọn phòng máy --</option>
                         {% for r in rooms %}
                         <option value="{{ r.id }}">{{ r.name }}</option>
                         {% endfor %}
                     </select>
                 </div>
+
+                <!-- Chọn Nhanh Mẫu Cấu Hình -->
+                <div class="form-group mb-2">
+                    <label class="font-weight-bold">Chọn Nhanh Loại Thiết Bị Camera:</label>
+                    <div class="btn-group btn-group-sm d-flex flex-wrap" role="group">
+                        <button type="button" class="btn btn-outline-secondary mb-1" onclick="setRtspPreset('add', '0')">
+                            <i class="fas fa-laptop mr-1"></i> Webcam 0
+                        </button>
+                        <button type="button" class="btn btn-outline-info mb-1" onclick="setRtspPreset('add', 'client_camera')">
+                            <i class="fas fa-broadcast-tower mr-1"></i> Trạm Phát Web (client_camera)
+                        </button>
+                        <button type="button" class="btn btn-outline-primary mb-1" onclick="setRtspPreset('add', 'http://192.168.1.50:8080/video')">
+                            <i class="fas fa-mobile mr-1"></i> App IP Webcam
+                        </button>
+                        <button type="button" class="btn btn-outline-primary mb-1" onclick="setRtspPreset('add', 'http://192.168.1.50:4747/video')">
+                            <i class="fas fa-mobile-alt mr-1"></i> App DroidCam
+                        </button>
+                        <button type="button" class="btn btn-outline-success mb-1" onclick="setRtspPreset('add', 'http://192.168.1.50:81/stream')">
+                            <i class="fas fa-microchip mr-1"></i> ESP32-CAM
+                        </button>
+                        <button type="button" class="btn btn-outline-purple mb-1" onclick="setRtspPreset('add', 'rtsp://admin:123456@192.168.1.50:554/stream1')">
+                            <i class="fas fa-shield-alt mr-1"></i> Camera RTSP
+                        </button>
+                    </div>
+                </div>
+
                 <div class="form-group">
-                    <label>Nguồn video (RTSP / Index webcam)</label>
-                    <input type="text" id="add-cam-rtsp" class="form-control" placeholder="0 (webcam), hoặc rtsp://...">
-                    <small class="form-text text-muted">Nhập số (0, 1...) cho webcam USB, URL RTSP cho IP Camera, hoặc nhập <b>client_camera</b> để phát từ thiết bị truy cập.</small>
+                    <label class="font-weight-bold">Nguồn Video / URL Kết Nối</label>
+                    <input type="text" id="add-cam-rtsp" class="form-control" placeholder="0 (webcam), client_camera, hoặc http://192.168.1.X:8080/video">
+                    <small class="form-text text-muted">
+                        • Điền <code>0</code> cho Webcam máy tính.<br>
+                        • Điền <code>client_camera</code> nếu muốn phát trực tiếp từ trình duyệt điện thoại/laptop.<br>
+                        • Điền đường dẫn <code>http://...</code> hoặc <code>rtsp://...</code> cho Camera IP / Điện thoại / ESP32-CAM.
+                    </small>
                 </div>
                 <div class="form-check">
                     <input type="checkbox" class="form-check-input" id="add-cam-active" checked>
-                    <label class="form-check-label" for="add-cam-active">Kích hoạt</label>
+                    <label class="form-check-label font-weight-bold" for="add-cam-active">Kích hoạt Camera ngay</label>
                 </div>
                 <div class="alert alert-danger d-none mt-2" id="add-cam-error"></div>
             </div>
             <div class="modal-footer">
                 <button class="btn btn-secondary" data-dismiss="modal">Hủy</button>
-                <button class="btn btn-primary" id="btn-add-cam" onclick="submitAddCam()">
-                    <i class="fas fa-save mr-1"></i>Lưu
+                <button class="btn btn-primary font-weight-bold" id="btn-add-cam" onclick="submitAddCam()">
+                    <i class="fas fa-save mr-1"></i> Lưu Camera
                 </button>
             </div>
         </div>
@@ -108,40 +228,97 @@
 
 <!-- Modal Sửa Camera -->
 <div class="modal fade" id="modalEditCamera" tabindex="-1">
-    <div class="modal-dialog">
+    <div class="modal-dialog modal-lg">
         <div class="modal-content">
             <div class="modal-header bg-info text-white">
-                <h5 class="modal-title"><i class="fas fa-edit mr-2"></i>Sửa thông tin Camera</h5>
+                <h5 class="modal-title font-weight-bold"><i class="fas fa-edit mr-2"></i>Sửa Thông Tin Camera</h5>
                 <button type="button" class="close text-white" data-dismiss="modal"><span>&times;</span></button>
             </div>
             <div class="modal-body">
                 <input type="hidden" id="edit-cam-id">
                 <div class="form-group">
-                    <label>Tên Camera <span class="text-danger">*</span></label>
+                    <label class="font-weight-bold">Tên Camera <span class="text-danger">*</span></label>
                     <input type="text" id="edit-cam-name" class="form-control">
                 </div>
                 <div class="form-group">
-                    <label>Phòng máy <span class="text-danger">*</span></label>
+                    <label class="font-weight-bold">Phòng máy <span class="text-danger">*</span></label>
                     <select id="edit-cam-room" class="form-control">
                         {% for r in rooms %}
                         <option value="{{ r.id }}">{{ r.name }}</option>
                         {% endfor %}
                     </select>
                 </div>
+
+                <!-- Chọn Nhanh Mẫu Cấu Hình Edit -->
+                <div class="form-group mb-2">
+                    <label class="font-weight-bold">Chọn Nhanh Loại Thiết Bị Camera:</label>
+                    <div class="btn-group btn-group-sm d-flex flex-wrap" role="group">
+                        <button type="button" class="btn btn-outline-secondary mb-1" onclick="setRtspPreset('edit', '0')">
+                            <i class="fas fa-laptop mr-1"></i> Webcam 0
+                        </button>
+                        <button type="button" class="btn btn-outline-info mb-1" onclick="setRtspPreset('edit', 'client_camera')">
+                            <i class="fas fa-broadcast-tower mr-1"></i> Trạm Phát Web (client_camera)
+                        </button>
+                        <button type="button" class="btn btn-outline-primary mb-1" onclick="setRtspPreset('edit', 'http://192.168.1.50:8080/video')">
+                            <i class="fas fa-mobile mr-1"></i> App IP Webcam
+                        </button>
+                        <button type="button" class="btn btn-outline-primary mb-1" onclick="setRtspPreset('edit', 'http://192.168.1.50:4747/video')">
+                            <i class="fas fa-mobile-alt mr-1"></i> App DroidCam
+                        </button>
+                        <button type="button" class="btn btn-outline-success mb-1" onclick="setRtspPreset('edit', 'http://192.168.1.50:81/stream')">
+                            <i class="fas fa-microchip mr-1"></i> ESP32-CAM
+                        </button>
+                        <button type="button" class="btn btn-outline-purple mb-1" onclick="setRtspPreset('edit', 'rtsp://admin:123456@192.168.1.50:554/stream1')">
+                            <i class="fas fa-shield-alt mr-1"></i> Camera RTSP
+                        </button>
+                    </div>
+                </div>
+
                 <div class="form-group">
-                    <label>Nguồn video (RTSP / Index)</label>
+                    <label class="font-weight-bold">Nguồn Video / URL Kết Nối</label>
                     <input type="text" id="edit-cam-rtsp" class="form-control">
-                    <small class="form-text text-muted">Nhập <b>client_camera</b> để dùng camera thiết bị truy cập.</small>
                 </div>
                 <div class="form-check">
                     <input type="checkbox" class="form-check-input" id="edit-cam-active">
-                    <label class="form-check-label" for="edit-cam-active">Kích hoạt</label>
+                    <label class="form-check-label font-weight-bold" for="edit-cam-active">Kích hoạt Camera</label>
                 </div>
                 <div class="alert alert-danger d-none mt-2" id="edit-cam-error"></div>
             </div>
             <div class="modal-footer">
                 <button class="btn btn-secondary" data-dismiss="modal">Hủy</button>
-                <button class="btn btn-info" onclick="submitEditCam()"><i class="fas fa-save mr-1"></i>Cập nhật</button>
+                <button class="btn btn-info font-weight-bold" onclick="submitEditCam()"><i class="fas fa-save mr-1"></i> Cập Nhật</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Xem Thử Live Preview -->
+<div class="modal fade" id="modalPreviewCamera" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content bg-dark text-white">
+            <div class="modal-header border-secondary">
+                <h5 class="modal-title font-weight-bold" id="preview-cam-title">
+                    <i class="fas fa-video mr-2 text-success"></i> Xem Thử Luồng Camera Live
+                </h5>
+                <button type="button" class="close text-white" data-dismiss="modal"><span>&times;</span></button>
+            </div>
+            <div class="modal-body text-center p-2">
+                <div class="position-relative bg-black rounded" style="min-height: 380px;">
+                    <img id="preview-img" src="" class="img-fluid rounded w-100" style="max-height: 480px; object-fit: contain;" alt="Live Stream">
+                    <div id="preview-spinner" class="position-absolute" style="top: 45%; left: 45%; display: none;">
+                        <i class="fas fa-spinner fa-spin fa-3x text-primary"></i>
+                    </div>
+                </div>
+                <div class="mt-2 text-sm text-muted d-flex justify-content-between px-2">
+                    <span id="preview-info-fps">FPS: --</span>
+                    <span id="preview-info-status">Trạng thái: Đang kết nối</span>
+                </div>
+            </div>
+            <div class="modal-footer border-secondary justify-content-between">
+                <a id="preview-streamer-link" href="#" class="btn btn-outline-info btn-sm" target="_blank" style="display:none;">
+                    <i class="fas fa-broadcast-tower mr-1"></i> Mở Trang Trạm Phát
+                </a>
+                <button type="button" class="btn btn-secondary btn-sm" data-dismiss="modal">Đóng</button>
             </div>
         </div>
     </div>
@@ -150,16 +327,24 @@
 
 {% block extra_js %}
 <script>
+function setRtspPreset(mode, val) {
+    if (mode === 'add') {
+        $('#add-cam-rtsp').val(val);
+    } else {
+        $('#edit-cam-rtsp').val(val);
+    }
+}
+
 function submitAddCam() {
     const name = $('#add-cam-name').val().trim();
     const room_id = $('#add-cam-room').val();
-    if (!name || !room_id) { showError('add-cam-error', 'Vui lòng điền đầy đủ tên và phòng'); return; }
+    if (!name || !room_id) { showError('add-cam-error', 'Vui lòng điền đầy đủ tên và phòng máy'); return; }
     $('#btn-add-cam').prop('disabled', true).html('<i class="fas fa-spinner fa-spin mr-1"></i>Đang lưu...');
     $.ajax({
         url: '/api/cameras', method: 'POST', contentType: 'application/json',
-        data: JSON.stringify({ name: name, room_id: parseInt(room_id), rtsp_url: $('#add-cam-rtsp').val().trim() || null, is_active: $('#add-cam-active').is(':checked') }),
+        data: JSON.stringify({ name: name, room_id: parseInt(room_id), rtsp_url: $('#add-cam-rtsp').val().trim() || '0', is_active: $('#add-cam-active').is(':checked') }),
         success: () => location.reload(),
-        error: (xhr) => { showError('add-cam-error', xhr.responseJSON?.error || 'Lỗi'); $('#btn-add-cam').prop('disabled', false).html('<i class="fas fa-save mr-1"></i>Lưu'); }
+        error: (xhr) => { showError('add-cam-error', xhr.responseJSON?.error || 'Lỗi thêm camera'); $('#btn-add-cam').prop('disabled', false).html('<i class="fas fa-save mr-1"></i>Lưu Camera'); }
     });
 }
 
@@ -174,30 +359,76 @@ function openEditCam(id, name, room_id, rtsp, is_active) {
 function submitEditCam() {
     const id = $('#edit-cam-id').val();
     const name = $('#edit-cam-name').val().trim();
-    if (!name) { showError('edit-cam-error', 'Tên không được để trống'); return; }
+    if (!name) { showError('edit-cam-error', 'Tên camera không được để trống'); return; }
     $.ajax({
         url: '/api/cameras/' + id, method: 'PUT', contentType: 'application/json',
-        data: JSON.stringify({ name: name, room_id: parseInt($('#edit-cam-room').val()), rtsp_url: $('#edit-cam-rtsp').val().trim() || null, is_active: $('#edit-cam-active').is(':checked') }),
+        data: JSON.stringify({ name: name, room_id: parseInt($('#edit-cam-room').val()), rtsp_url: $('#edit-cam-rtsp').val().trim() || '0', is_active: $('#edit-cam-active').is(':checked') }),
         success: () => location.reload(),
-        error: (xhr) => showError('edit-cam-error', xhr.responseJSON?.error || 'Lỗi')
+        error: (xhr) => showError('edit-cam-error', xhr.responseJSON?.error || 'Lỗi cập nhật')
     });
 }
 
 function deleteCam(id, name) {
-    if (!confirm(`Xóa camera "${name}"? Dữ liệu ROI và sự kiện liên quan cũng sẽ bị xóa.`)) return;
+    if (!confirm(`Bạn có chắc muốn xóa camera "${name}" không? Toàn bộ thiết lập ROI liên quan sẽ bị xóa.`)) return;
     $.ajax({
         url: '/api/cameras/' + id, method: 'DELETE',
-        success: () => { $('#row-cam-' + id).remove(); toastr.success('Đã xóa camera ' + name); },
-        error: (xhr) => toastr.error(xhr.responseJSON?.message || 'Lỗi')
+        success: () => { $('#row-cam-' + id).fadeOut(300, function() { $(this).remove(); }); toastr.success('Đã xóa camera thành công'); },
+        error: (xhr) => toastr.error(xhr.responseJSON?.message || 'Lỗi khi xóa camera')
     });
 }
+
+function testCamConnection(id) {
+    const btn = $(`#btn-test-${id}`);
+    const origHtml = btn.html();
+    btn.prop('disabled', true).html('<i class="fas fa-spinner fa-spin"></i>');
+    
+    $.ajax({
+        url: `/api/cameras/${id}/test_connection`,
+        method: 'GET',
+        success: (res) => {
+            btn.prop('disabled', false).html(origHtml);
+            if (res.status === 'ok') {
+                toastr.success(`[Camera #${id}] ${res.message}`);
+            } else if (res.status === 'waiting') {
+                toastr.info(`[Camera #${id}] ${res.message}`);
+            } else {
+                toastr.warning(`[Camera #${id}] ${res.message}`);
+            }
+        },
+        error: (xhr) => {
+            btn.prop('disabled', false).html(origHtml);
+            toastr.error(xhr.responseJSON?.message || 'Không thể kiểm tra kết nối.');
+        }
+    });
+}
+
+let previewPolling = null;
+function openPreviewCam(id, name) {
+    $('#preview-cam-title').html(`<i class="fas fa-video mr-2 text-success"></i> Xem Thử: ${name} (Camera #${id})`);
+    $('#preview-img').attr('src', `/video_feed/${id}?t=` + new Date().getTime());
+    $('#preview-streamer-link').attr('href', `/streamer/${id}`).toggle(true);
+    $('#modalPreviewCamera').modal('show');
+
+    if (previewPolling) clearInterval(previewPolling);
+    previewPolling = setInterval(() => {
+        $.get(`/camera_status/${id}`, (data) => {
+            $('#preview-info-fps').text(`FPS: ${data.fps || 0}`);
+            $('#preview-info-status').text(`Nguồn: ${data.source_name || '--'} | Online: ${data.is_online ? 'Có' : 'Không'}`);
+        });
+    }, 1500);
+}
+
+$('#modalPreviewCamera').on('hidden.bs.modal', function() {
+    $('#preview-img').attr('src', '');
+    if (previewPolling) { clearInterval(previewPolling); previewPolling = null; }
+});
 
 function showError(elemId, msg) { $('#' + elemId).text(msg).removeClass('d-none'); }
 
 $('#modalAddCamera').on('hidden.bs.modal', function() {
     $('#add-cam-name, #add-cam-rtsp').val(''); $('#add-cam-room').val('');
     $('#add-cam-active').prop('checked', true); $('#add-cam-error').addClass('d-none');
-    $('#btn-add-cam').prop('disabled', false).html('<i class="fas fa-save mr-1"></i>Lưu');
+    $('#btn-add-cam').prop('disabled', false).html('<i class="fas fa-save mr-1"></i>Lưu Camera');
 });
 </script>
 {% endblock %}

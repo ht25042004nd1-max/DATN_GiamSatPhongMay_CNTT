@@ -1,53 +1,107 @@
 {% extends "base.html" %}
 
-{% block title %}Trạm Phát Camera Thiết Bị{% endblock %}
+{% block title %}Trạm Phát Camera Thiết Bị (ID: {{ camera_id }}) — VIU Lab Monitor{% endblock %}
+{% block header_title %}Trạm Phát Camera Thiết Bị{% endblock %}
+{% block title_sub %}Wireless Device Camera Streamer{% endblock %}
 
 {% block content %}
-<div class="content-wrapper">
-    <section class="content-header">
-        <div class="container-fluid">
-            <div class="row mb-2">
-                <div class="col-sm-6">
-                    <h1><i class="fas fa-broadcast-tower text-success"></i> Trạm Phát Camera (Camera ID: {{ camera_id }})</h1>
-                </div>
+<div class="row">
+    <!-- Cột trái: Khung phát Video & Điều khiển -->
+    <div class="col-lg-8 col-md-12 mx-auto">
+        <div class="card card-outline card-success shadow-sm">
+            <div class="card-header d-flex align-items-center justify-content-between">
+                <h3 class="card-title font-weight-bold mb-0">
+                    <i class="fas fa-broadcast-tower text-success mr-2"></i> Trạm Phát Trực Tiếp (Camera ID: #{{ camera_id }})
+                </h3>
+                <span id="badge-stream-status" class="badge badge-secondary p-2">
+                    <i class="fas fa-pause-circle mr-1"></i> Chưa phát
+                </span>
             </div>
-        </div>
-    </section>
+            
+            <div class="card-body text-center p-3">
+                <p class="text-muted text-sm mb-3">
+                    Biến điện thoại hoặc laptop này thành <b>Camera Giám sát Không dây</b>. Hình ảnh thu từ camera sẽ được mã hóa và truyền thời gian thực về máy chủ để AI phân tích nhận diện tư thế và phát hiện vi phạm.
+                </p>
 
-    <section class="content">
-        <div class="container-fluid">
-            <div class="row">
-                <div class="col-md-8 mx-auto">
-                    <div class="card card-success card-outline">
-                        <div class="card-header">
-                            <h3 class="card-title">Truy cập Camera Trực Tiếp và Phát Tín Hiệu</h3>
-                        </div>
-                        <div class="card-body text-center">
-                            <p class="text-muted">Nhấn nút bên dưới để cấp quyền cho trình duyệt truy cập vào camera trên thiết bị của bạn. Hình ảnh sẽ liên tục được truyền về Server để AI phân tích.</p>
-                            
-                            <div class="form-group text-left" id="camera-select-group" style="display: none; max-width: 600px; margin: 0 auto 15px auto;">
-                                <label for="camera-select">Chọn Camera:</label>
-                                <select id="camera-select" class="form-control"></select>
-                            </div>
-                            
-                            <video id="client-video" autoplay playsinline muted style="width: 100%; max-width: 600px; background-color: #000; border-radius: 8px; margin-bottom: 20px;"></video>
-                            <canvas id="capture-canvas" style="display: none;"></canvas>
-
-                            <br>
-                            <button id="start-camera" class="btn btn-success btn-lg"><i class="fas fa-video"></i> Bật Camera & Bắt đầu Phát</button>
-                            <button id="stop-camera" class="btn btn-danger btn-lg" style="display: none;"><i class="fas fa-stop"></i> Dừng Phát</button>
-                            
-                            <div id="status-message" class="alert alert-info mt-3" style="display: none;"></div>
-                        </div>
+                <!-- Bộ tùy chọn Camera & Độ phân giải -->
+                <div class="row mb-3 justify-content-center text-left" style="max-width: 650px; margin: 0 auto;">
+                    <div class="col-sm-6 mb-2" id="camera-select-group" style="display: none;">
+                        <label class="text-xs font-weight-bold text-muted mb-1"><i class="fas fa-video mr-1"></i> Chọn Ống kính Camera:</label>
+                        <select id="camera-select" class="form-control form-control-sm"></select>
+                    </div>
+                    <div class="col-sm-6 mb-2">
+                        <label class="text-xs font-weight-bold text-muted mb-1"><i class="fas fa-sliders-h mr-1"></i> Tốc độ & Độ phân giải:</label>
+                        <select id="res-select" class="form-control form-control-sm">
+                            <option value="640_480_5">640 x 480 @ 5 FPS (Mặc định - Mượt & Tiết kiệm mạng)</option>
+                            <option value="640_480_10">640 x 480 @ 10 FPS (AI Phản hồi nhanh)</option>
+                            <option value="1280_720_5">1280 x 720 (HD 720p - Sắc nét cao)</option>
+                            <option value="320_240_5">320 x 240 (Tiết kiệm băng thông tối đa)</option>
+                        </select>
                     </div>
                 </div>
+
+                <!-- Video Viewport -->
+                <div class="position-relative mx-auto" style="max-width: 640px; background: #111; border-radius: 10px; overflow: hidden; border: 2px solid #28a745;">
+                    <video id="client-video" autoplay playsinline muted style="width: 100%; display: block; min-height: 280px; object-fit: cover;"></video>
+                    <canvas id="capture-canvas" style="display: none;"></canvas>
+                    
+                    <!-- Overlay Metrics -->
+                    <div id="video-overlay-metrics" class="position-absolute text-left text-white px-2 py-1" style="top: 8px; left: 8px; background: rgba(0,0,0,0.65); border-radius: 4px; font-size: 0.75rem; font-family: monospace; display: none;">
+                        <div><i class="fas fa-bolt text-warning mr-1"></i> <span id="metric-fps">0</span> FPS | <span id="metric-res">--</span></div>
+                        <div><i class="fas fa-paper-plane text-info mr-1"></i> Đã gửi: <span id="metric-frames">0</span> frames</div>
+                    </div>
+                </div>
+
+                <!-- Nút bấm Điều khiển -->
+                <div class="mt-3">
+                    <button id="start-camera" class="btn btn-success btn-lg px-4 font-weight-bold shadow-sm">
+                        <i class="fas fa-play mr-2"></i> Bật Camera & Bắt đầu Phát
+                    </button>
+                    <button id="stop-camera" class="btn btn-danger btn-lg px-4 font-weight-bold shadow-sm" style="display: none;">
+                        <i class="fas fa-stop mr-2"></i> Dừng Phát Tín Hiệu
+                    </button>
+                    <a href="{{ url_for('main.monitor') }}" class="btn btn-outline-secondary btn-lg ml-2">
+                        <i class="fas fa-desktop mr-1"></i> Xem Giám sát
+                    </a>
+                </div>
+
+                <!-- Hộp thông báo trạng thái -->
+                <div id="status-message" class="alert alert-info mt-3 text-left text-sm" style="display: none;"></div>
             </div>
         </div>
-    </section>
+
+        <!-- Card Hướng dẫn kết nối từ Điện thoại -->
+        <div class="card card-outline card-navy shadow-sm">
+            <div class="card-header">
+                <h3 class="card-title font-weight-bold text-navy">
+                    <i class="fas fa-mobile-alt mr-2"></i> Hướng Dẫn Phát Từ Điện Thoại Thông Minh
+                </h3>
+            </div>
+            <div class="card-body text-sm">
+                <ol class="pl-3 mb-0">
+                    <li class="mb-2">
+                        Kết nối điện thoại vào <b>cùng mạng WiFi</b> với máy chủ giám sát.
+                    </li>
+                    <li class="mb-2">
+                        Mở trình duyệt (Chrome/Safari) trên điện thoại và truy cập địa chỉ IP máy chủ:
+                        <div class="my-1 p-2 bg-light rounded border text-monospace font-weight-bold text-primary">
+                            http://{{ request.host }}/streamer/{{ camera_id }}
+                        </div>
+                    </li>
+                    <li class="mb-2">
+                        Đăng nhập tài khoản và nhấn nút <b>"Bật Camera & Bắt đầu Phát"</b>.
+                    </li>
+                    <li>
+                        Nếu dùng camera IP gia đình hoặc app ngoài (IP Webcam / DroidCam / ESP32-CAM), vào mục <a href="{{ url_for('camera.index') }}"><b>Quản lý Camera</b></a> và điền đường link RTSP / HTTP vào cấu hình.
+                    </li>
+                </ol>
+            </div>
+        </div>
+    </div>
 </div>
 {% endblock %}
 
-{% block scripts %}
+{% block extra_js %}
 <script>
     const cameraId = {{ camera_id }};
     const videoElement = document.getElementById('client-video');
@@ -58,17 +112,24 @@
     const statusMsg = document.getElementById('status-message');
     const cameraSelectGroup = document.getElementById('camera-select-group');
     const cameraSelect = document.getElementById('camera-select');
-    
+    const resSelect = document.getElementById('res-select');
+    const badgeStatus = document.getElementById('badge-stream-status');
+    const overlayMetrics = document.getElementById('video-overlay-metrics');
+    const metricFps = document.getElementById('metric-fps');
+    const metricRes = document.getElementById('metric-res');
+    const metricFrames = document.getElementById('metric-frames');
+
     let currentStream = null;
     let streamInterval = null;
+    let totalFramesSent = 0;
+    let lastSecondFrames = 0;
+    let fpsInterval = null;
+    let isSending = false;
 
     // Tự động load danh sách camera nếu trình duyệt hỗ trợ
     async function loadCameras() {
         if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) return;
         try {
-            // Yêu cầu quyền tạm thời để lấy tên camera đầy đủ
-            await navigator.mediaDevices.getUserMedia({video: true, audio: false}).then(s => s.getTracks().forEach(t => t.stop())).catch(e => {});
-            
             const devices = await navigator.mediaDevices.enumerateDevices();
             const videoDevices = devices.filter(device => device.kind === 'videoinput');
             
@@ -77,7 +138,7 @@
                 videoDevices.forEach((device, index) => {
                     const option = document.createElement('option');
                     option.value = device.deviceId;
-                    option.text = device.label || `Camera ${index + 1}`;
+                    option.text = device.label || `Camera ${index + 1} (${device.deviceId.substring(0, 5)}...)`;
                     cameraSelect.appendChild(option);
                 });
                 cameraSelectGroup.style.display = 'block';
@@ -87,69 +148,80 @@
         }
     }
     
-    // Khởi chạy khi load trang
     loadCameras();
 
     startBtn.addEventListener('click', async () => {
         try {
             if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-                throw new Error("Trình duyệt không hỗ trợ Camera. Vui lòng dùng HTTPS hoặc truy cập qua localhost.");
+                throw new Error("Trình duyệt không hỗ trợ Camera hoặc chưa chạy trên HTTPS/localhost. Vui lòng cấp quyền truy cập Camera.");
             }
             
-            let stream;
             let constraints = { audio: false };
-            
-            // Nếu người dùng chọn camera cụ thể
             if (cameraSelect.value) {
                 constraints.video = { deviceId: { exact: cameraSelect.value } };
             } else {
                 constraints.video = { facingMode: { ideal: 'environment' } };
             }
 
+            let stream;
             try {
-                // Thử yêu cầu camera với cấu hình đã chọn
                 stream = await navigator.mediaDevices.getUserMedia(constraints);
             } catch (firstErr) {
-                console.warn("Không thể mở camera với cấu hình mong muốn, thử lại mặc định...", firstErr);
-                // Fallback: Mở bất kỳ camera nào có sẵn
-                stream = await navigator.mediaDevices.getUserMedia({ 
-                    video: true, 
-                    audio: false 
-                });
+                console.warn("Thử lại với cấu hình mặc định...", firstErr);
+                stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
             }
             
-            // Lắng nghe sự kiện trước khi gán stream để không bị miss event
-            videoElement.onloadedmetadata = () => {
-                // Resize canvas để ảnh tải lên nhẹ bớt
-                const ratio = videoElement.videoWidth / videoElement.videoHeight;
-                canvasElement.width = 640;
-                canvasElement.height = 640 / ratio;
-
-                // Bắt đầu gửi frame liên tục (5 fps = 200ms)
-                if (streamInterval) clearInterval(streamInterval);
-                streamInterval = setInterval(sendFrameToServer, 200);
-            };
-
             videoElement.srcObject = stream;
             currentStream = stream;
             
-            // Bắt buộc gọi play() cho một số trình duyệt khó tính như iOS Safari
             try {
                 await videoElement.play();
             } catch (playErr) {
-                console.warn("Autoplay bị chặn, cần tương tác thêm:", playErr);
+                console.warn("Play error:", playErr);
             }
-            
+
+            // Đọc cấu hình độ phân giải và tần số gửi
+            const resVal = resSelect.value.split('_');
+            const targetW = parseInt(resVal[0]);
+            const targetH = parseInt(resVal[1]);
+            const targetFps = parseInt(resVal[2]);
+            const intervalMs = Math.round(1000 / targetFps);
+
+            canvasElement.width = targetW;
+            canvasElement.height = targetH;
+            metricRes.innerText = `${targetW}x${targetH}`;
+
+            totalFramesSent = 0;
+            lastSecondFrames = 0;
+            overlayMetrics.style.display = 'block';
+
+            // Bắt đầu gửi frame liên tục
+            if (streamInterval) clearInterval(streamInterval);
+            streamInterval = setInterval(sendFrameToServer, intervalMs);
+
+            // Bắt đầu đo FPS thực tế
+            if (fpsInterval) clearInterval(fpsInterval);
+            fpsInterval = setInterval(() => {
+                metricFps.innerText = lastSecondFrames;
+                lastSecondFrames = 0;
+            }, 1000);
+
             startBtn.style.display = 'none';
             stopBtn.style.display = 'inline-block';
-            statusMsg.className = 'alert alert-info mt-3';
-            statusMsg.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Đang phát dữ liệu lên Server...';
+            badgeStatus.className = 'badge badge-success p-2 animate__animated animate__pulse animate__infinite';
+            badgeStatus.innerHTML = '<i class="fas fa-signal mr-1"></i> Đang phát trực tiếp';
+            
+            statusMsg.className = 'alert alert-success mt-3';
+            statusMsg.innerHTML = '<i class="fas fa-check-circle mr-1"></i> <b>Đã kết nối thành công!</b> Tín hiệu camera đang được truyền về máy chủ để AI phân tích.';
             statusMsg.style.display = 'block';
 
+            // Load lại danh sách camera nếu lúc trước chưa có nhãn
+            loadCameras();
+
         } catch (err) {
-            console.error("Lỗi khi truy cập camera:", err);
+            console.error("Lỗi truy cập camera:", err);
             statusMsg.className = 'alert alert-danger mt-3';
-            statusMsg.innerHTML = "Không thể truy cập camera. Vui lòng kiểm tra quyền trên trình duyệt: " + err.message;
+            statusMsg.innerHTML = '<i class="fas fa-exclamation-triangle mr-1"></i> Không thể mở camera: ' + err.message;
             statusMsg.style.display = 'block';
         }
     });
@@ -159,41 +231,46 @@
             currentStream.getTracks().forEach(track => track.stop());
             videoElement.srcObject = null;
             currentStream = null;
-            
-            if (streamInterval) {
-                clearInterval(streamInterval);
-                streamInterval = null;
-            }
-
-            startBtn.style.display = 'inline-block';
-            stopBtn.style.display = 'none';
-            statusMsg.className = 'alert alert-warning mt-3';
-            statusMsg.innerHTML = '<i class="fas fa-info-circle"></i> Đã dừng phát video.';
         }
+        
+        if (streamInterval) { clearInterval(streamInterval); streamInterval = null; }
+        if (fpsInterval) { clearInterval(fpsInterval); fpsInterval = null; }
+
+        startBtn.style.display = 'inline-block';
+        stopBtn.style.display = 'none';
+        overlayMetrics.style.display = 'none';
+        
+        badgeStatus.className = 'badge badge-secondary p-2';
+        badgeStatus.innerHTML = '<i class="fas fa-pause-circle mr-1"></i> Đã dừng';
+
+        statusMsg.className = 'alert alert-warning mt-3';
+        statusMsg.innerHTML = '<i class="fas fa-info-circle mr-1"></i> Đã dừng phát tín hiệu video.';
     });
 
     async function sendFrameToServer() {
-        if (videoElement.readyState === videoElement.HAVE_ENOUGH_DATA) {
-            // Vẽ frame hiện tại lên canvas
-            ctx.drawImage(videoElement, 0, 0, canvasElement.width, canvasElement.height);
-            
-            // Chuyển thành base64 JPEG với chất lượng 0.7
-            const base64Image = canvasElement.toDataURL('image/jpeg', 0.7);
-
+        if (isSending) return; // Tránh dồn ứ request khi mạng chậm
+        if (videoElement.readyState >= videoElement.HAVE_CURRENT_DATA) {
+            isSending = true;
             try {
+                // Vẽ frame hiện tại lên canvas
+                ctx.drawImage(videoElement, 0, 0, canvasElement.width, canvasElement.height);
+                const base64Image = canvasElement.toDataURL('image/jpeg', 0.7);
+
                 const response = await fetch(`/api/cameras/${cameraId}/upload_frame`, {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
+                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ image: base64Image })
                 });
 
-                if (!response.ok) {
-                    console.error('Lỗi khi gửi frame:', await response.text());
+                if (response.ok) {
+                    totalFramesSent++;
+                    lastSecondFrames++;
+                    metricFrames.innerText = totalFramesSent;
                 }
             } catch (err) {
-                console.error('Lỗi kết nối mạng:', err);
+                console.warn('Lỗi mạng truyền frame:', err);
+            } finally {
+                isSending = false;
             }
         }
     }

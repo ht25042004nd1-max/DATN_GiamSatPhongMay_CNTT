@@ -1,0 +1,11 @@
+{
+  "timestamp": "2026-08-10T15:53:14.406481",
+  "camera_id": 1,
+  "user_label": "TestPose",
+  "ai_detected_pose": "Khong phat hien",
+  "confidence": 0.0,
+  "is_detected": false,
+  "note": "System test frame",
+  "image_filename": "sample_20260810_155314_402.jpg",
+  "rois": []
+}

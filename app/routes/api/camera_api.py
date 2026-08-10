@@ -60,6 +60,10 @@ def update_camera(camera_id):
     if 'is_active' in data: camera.is_active = bool(data['is_active'])
         
     db.session.commit()
+    
+    from app.services.camera_service import camera_manager
+    camera_manager.remove_camera(camera_id)
+
     log_audit('UPDATE_CAMERA', 'Camera', camera.id, {'name': camera.name})
     return jsonify(camera.to_dict())
 
@@ -69,10 +73,64 @@ def update_camera(camera_id):
 def delete_camera(camera_id):
     camera = Camera.query.get_or_404(camera_id)
     name = camera.name
+    
+    from app.services.camera_service import camera_manager
+    camera_manager.remove_camera(camera_id)
+
     db.session.delete(camera)
     db.session.commit()
     log_audit('DELETE_CAMERA', 'Camera', camera_id, {'name': name})
     return jsonify({'message': 'Đã xóa camera thành công'})
+
+@camera_bp.route('/api/cameras/<int:camera_id>/test_connection', methods=['GET', 'POST'])
+@login_required
+def test_connection(camera_id):
+    """Kiểm tra kết nối tới Camera (Webcam, RTSP, IP Phone Cam, Client Cam)."""
+    import cv2
+    from app.services.camera_service import camera_manager, ClientCamera
+    camera = Camera.query.get_or_404(camera_id)
+    rtsp = (camera.rtsp_url or '').strip()
+    
+    if not rtsp:
+        return jsonify({'status': 'error', 'message': 'Chưa cấu hình URL hoặc Nguồn Camera!'}), 400
+        
+    if rtsp.lower() == 'client_camera':
+        cam_service = camera_manager.get_camera(camera_id, source='client_camera')
+        if isinstance(cam_service, ClientCamera):
+            has_frame = cam_service.frame is not None
+            fps = cam_service.fps
+            return jsonify({
+                'status': 'ok' if has_frame else 'waiting',
+                'type': 'client_camera',
+                'message': f'Đang nhận luồng từ trạm phát ({fps} FPS)' if has_frame else 'Chờ thiết bị (điện thoại/laptop) mở trang Trạm Phát (/streamer) để truyền frame.',
+                'fps': fps,
+                'is_online': cam_service.is_online
+            })
+    
+    # Thử mở bằng cv2 VideoCapture
+    src = int(rtsp) if rtsp.isdigit() else rtsp
+    import platform
+    is_win = platform.system() == 'Windows'
+    if isinstance(src, int) and is_win:
+        cap = cv2.VideoCapture(src, cv2.CAP_DSHOW)
+    else:
+        cap = cv2.VideoCapture(src)
+
+    if cap.isOpened():
+        ret, frame = cap.read()
+        cap.release()
+        if ret and frame is not None:
+            h, w = frame.shape[:2]
+            return jsonify({
+                'status': 'ok',
+                'type': 'stream',
+                'resolution': f'{w}x{h}',
+                'message': f'Kết nối thành công tới nguồn {rtsp} (Độ phân giải: {w}x{h})'
+            })
+        else:
+            return jsonify({'status': 'error', 'message': f'Nguồn {rtsp} mở được nhưng không đọc được dữ liệu hình ảnh.'})
+    else:
+        return jsonify({'status': 'error', 'message': f'Không thể kết nối tới {rtsp}. Vui lòng kiểm tra lại IP/URL hoặc kết nối WiFi.'})
 
 @camera_bp.route('/api/cameras/<int:camera_id>/upload_frame', methods=['POST'])
 def upload_frame(camera_id):
