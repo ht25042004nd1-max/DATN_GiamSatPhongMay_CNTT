@@ -61,11 +61,22 @@
                 throw new Error("Trình duyệt không hỗ trợ Camera. Vui lòng dùng HTTPS hoặc truy cập qua localhost.");
             }
             
-            // Yêu cầu quyền truy cập camera (ưu tiên camera sau, nếu không có thì dùng camera mặc định)
-            const stream = await navigator.mediaDevices.getUserMedia({ 
-                video: { facingMode: { ideal: 'environment' } }, 
-                audio: false 
-            });
+            let stream;
+            try {
+                // Thử yêu cầu camera với ưu tiên camera sau
+                stream = await navigator.mediaDevices.getUserMedia({ 
+                    video: { facingMode: { ideal: 'environment' } }, 
+                    audio: false 
+                });
+            } catch (firstErr) {
+                console.warn("Không thể mở camera với facingMode, thử lại cấu hình mặc định...", firstErr);
+                // Fallback: Mở bất kỳ camera nào có sẵn
+                stream = await navigator.mediaDevices.getUserMedia({ 
+                    video: true, 
+                    audio: false 
+                });
+            }
+            
             // Lắng nghe sự kiện trước khi gán stream để không bị miss event
             videoElement.onloadedmetadata = () => {
                 // Resize canvas để ảnh tải lên nhẹ bớt
