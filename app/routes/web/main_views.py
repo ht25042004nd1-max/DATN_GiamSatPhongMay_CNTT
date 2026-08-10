@@ -58,6 +58,21 @@ def monitor():
 @main_bp.route('/video_feed/<int:camera_id>')
 @login_required
 def video_feed(camera_id):
+    from app.models.camera import Camera
+    cam_model = Camera.query.get(camera_id)
+    if not cam_model:
+        # Camera không tồn tại, trả về ảnh tĩnh
+        placeholder = os.path.abspath(os.path.join(
+            os.path.dirname(__file__), '..', '..', 'static', 'images', 'placeholder.png'
+        ))
+        if os.path.exists(placeholder):
+            with open(placeholder, 'rb') as f:
+                data = f.read()
+            from flask import make_response
+            resp = make_response(data)
+            resp.headers['Content-Type'] = 'image/png'
+            return resp
+        return Response('Camera not found', 404)
     cam = _get_camera(camera_id)
     def generate():
         while True:
@@ -74,6 +89,18 @@ def video_feed(camera_id):
 @main_bp.route('/camera_status/<int:camera_id>')
 @login_required
 def camera_status(camera_id):
+    from app.models.camera import Camera
+    cam_model = Camera.query.get(camera_id)
+    if not cam_model:
+        return jsonify({
+            'error': 'Camera không tồn tại',
+            'is_online': False,
+            'fps': 0.0,
+            'pose_enabled': False,
+            'pose': {'is_detected': False, 'pose': 'Không có camera', 'confidence': 0},
+            'source_name': 'N/A',
+            'timestamp': ''
+        }), 404
     cam = _get_camera(camera_id)
     return jsonify(cam.get_status())
 
@@ -115,8 +142,8 @@ def settings():
 @admin_required
 def accounts():
     from app.models.user import User
-    # Ẩn tài khoản admin mặc định khỏi danh sách để bảo mật
-    users = User.query.filter(User.username != 'admin').order_by(User.id.desc()).all()
+    # Ẩn tất cả tài khoản có quyền admin khỏi danh sách
+    users = User.query.filter(User.role != 'admin').order_by(User.id.desc()).all()
     return render_template('accounts.html', users=users, active_page='accounts')
 
 @main_bp.route('/accounts/create', methods=['POST'])
@@ -126,12 +153,21 @@ def create_account():
     from app import db
     from app.models.user import User
 
+    security_code = request.form.get('security_code', '')
+    if security_code != os.getenv('ADMIN_SECURITY_CODE', '199999'):
+        flash('Mã xác thực Admin không chính xác!', 'danger')
+        return redirect(url_for('main.accounts'))
+
     username = request.form.get('username', '').strip().lower()
     password = request.form.get('password', '')
     display_name = request.form.get('display_name', '').strip()
     email = request.form.get('email', '').strip()
     phone = request.form.get('phone', '').strip()
     role = request.form.get('role', 'monitor')
+
+    if role == 'admin':
+        flash('Không được phép tạo thêm tài khoản với quyền admin.', 'danger')
+        return redirect(url_for('main.accounts'))
 
     if not username or not password:
         flash('Tên đăng nhập và mật khẩu không được để trống.', 'danger')
@@ -175,11 +211,19 @@ def edit_account(user_id):
     from app import db
     from app.models.user import User
 
+    security_code = request.form.get('security_code', '')
+    if security_code != os.getenv('ADMIN_SECURITY_CODE', '199999'):
+        flash('Mã xác thực Admin không chính xác!', 'danger')
+        return redirect(url_for('main.accounts'))
+
     user = User.query.get_or_404(user_id)
     role = request.form.get('role', user.role)
     if user.id == current_user.id and role != 'admin' and user.role == 'admin':
         flash('Bạn không thể tự hạ quyền giám sát (role) của chính mình.', 'warning')
         role = 'admin'
+    elif role == 'admin' and user.role != 'admin':
+        flash('Không được phép cấp quyền admin cho tài khoản khác.', 'danger')
+        return redirect(url_for('main.accounts'))
 
     display_name = request.form.get('display_name', '').strip()
     email = request.form.get('email', '').strip()
@@ -213,6 +257,11 @@ def reset_password(user_id):
     from app import db
     from app.models.user import User
 
+    security_code = request.form.get('security_code', '')
+    if security_code != os.getenv('ADMIN_SECURITY_CODE', '199999'):
+        flash('Mã xác thực Admin không chính xác!', 'danger')
+        return redirect(url_for('main.accounts'))
+
     user = User.query.get_or_404(user_id)
     password = request.form.get('password', '')
 
@@ -239,6 +288,11 @@ def unlock_account(user_id):
     from app import db
     from app.models.user import User
 
+    security_code = request.form.get('security_code', '')
+    if security_code != os.getenv('ADMIN_SECURITY_CODE', '199999'):
+        flash('Mã xác thực Admin không chính xác!', 'danger')
+        return redirect(url_for('main.accounts'))
+
     user = User.query.get_or_404(user_id)
     user.failed_attempts = 0
     user.locked_until = None
@@ -259,6 +313,11 @@ def unlock_account(user_id):
 def delete_account(user_id):
     from app import db
     from app.models.user import User
+
+    security_code = request.form.get('security_code', '')
+    if security_code != os.getenv('ADMIN_SECURITY_CODE', '199999'):
+        flash('Mã xác thực Admin không chính xác!', 'danger')
+        return redirect(url_for('main.accounts'))
 
     user = User.query.get_or_404(user_id)
 

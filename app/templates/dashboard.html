@@ -262,11 +262,22 @@
             </div>
             <div class="card-body p-0 text-center bg-dark">
                 <div class="position-relative" style="min-height: 250px;">
-                    <img src="{{ url_for('main.video_feed', camera_id=1) }}"
+                    <div id="no-camera-notice" class="text-white p-5" style="display:none;">
+                        <i class="fas fa-video-slash fa-3x mb-3 text-warning"></i>
+                        <h5 class="text-warning">Chưa có camera nào được cấu hình</h5>
+                        <p class="text-muted mb-3">Vui lòng thêm camera kiểu <code class="text-warning">client_camera</code> để bắt đầu nhận hình ảnh từ thiết bị của bạn.</p>
+                        {% if current_user.role == 'admin' %}
+                        <a href="{{ url_for('camera.index') }}" class="btn btn-warning btn-sm">
+                            <i class="fas fa-plus mr-1"></i> Thêm Camera ngay
+                        </a>
+                        {% endif %}
+                    </div>
+                    <img src=""
                          alt="Camera Stream"
                          class="img-fluid"
                          id="dashboard-video-feed"
-                         style="max-height: 450px; object-fit: contain; width: 100%;">
+                         style="max-height: 450px; object-fit: contain; width: 100%; display:none;"
+                         onerror="this.style.display='none'; document.getElementById('no-camera-notice').style.display='block';">
                 </div>
             </div>
             <div class="card-footer text-muted text-sm d-flex justify-content-between">
@@ -290,8 +301,9 @@
     };
 
     function updateDashboardData() {
-        // Lấy camera đầu tiên từ DB, hoặc dùng ID cứng là 1
-        const cameraId = window._dashboardCamId || 1;
+        // Chỉ gọi khi đã có camera trong DB
+        const cameraId = window._dashboardCamId;
+        if (!cameraId) return;
         $.ajax({
             url: '/camera_status/' + cameraId,
             method: 'GET',
@@ -312,7 +324,7 @@
                 }
 
                 // KPI 4: Thời gian hệ thống
-                $('#kpi-system-time').text(data.timestamp.split(' ')[1] || data.timestamp);
+                $('#kpi-system-time').text(data.timestamp ? data.timestamp.split(' ')[1] : '--:--:--');
 
                 // Thông tin hệ thống
                 $('#sys-video-source').text(data.source_name);
@@ -362,19 +374,14 @@
                 }
             },
             error: function() {
-                var camKpi = $('#kpi-cam-status');
-                var camKpiBox = camKpi.closest('.small-box');
-                camKpi.text('LỖI KẾT NỐI');
-                camKpiBox.removeClass('bg-success bg-danger').addClass('bg-secondary');
-                $('#kpi-fps-text').text('Mất kết nối server');
-
-                $('#srv-cam-badge').attr('class', 'badge badge-secondary').text('Lỗi kết nối');
-                $('#srv-cam-detail').text('Không thể tải trạng thái');
-                $('#srv-ai-badge').attr('class', 'badge badge-secondary').text('Lỗi kết nối');
-                $('#srv-ai-detail').text('Không thể tải trạng thái');
+                // Camera offline hoặc chưa có — chỉ đánh dấu Offline, không hiện 'Lỗi kết nối'
+                $('#srv-cam-badge').attr('class', 'badge badge-secondary').text('Ngoại tuyến');
+                $('#srv-cam-detail').text('Camera không phản hồi');
             }
         });
+    }
 
+    function updateOtherDashboardData() {
         // Đếm số lượng event pending từ API và cập nhật KPI 3
         $.ajax({
             url: '/api/events/count',
@@ -387,7 +394,11 @@
             }
         });
 
+        // Cập nhật thời gian hệ thống (không phụ thuộc camera)
+        $('#kpi-system-time').text(new Date().toLocaleTimeString('vi-VN'));
+
         // Fetch IoT status & environmental sensors
+
         $.ajax({
             url: '/api/iot/status',
             method: 'GET',
@@ -441,22 +452,38 @@
     }
 
     $(document).ready(function() {
-        // Khởi tạo: lấy camera đầu tiên
+        // Khởi tạo: lấy camera đầu tiên từ DB
         $.ajax({
             url: '/api/cameras',
             method: 'GET',
             success: function(cameras) {
                 if (cameras && cameras.length > 0) {
                     window._dashboardCamId = cameras[0].id;
-                    // Cập nhật thẻ ảnh stream video sang đúng camera được lấy
-                    $('#dashboard-video-feed').attr('src', '/video_feed/' + window._dashboardCamId);
+                    // Hiện video stream và ẩn thông báo
+                    $('#dashboard-video-feed')
+                        .attr('src', '/video_feed/' + window._dashboardCamId)
+                        .show();
+                    $('#no-camera-notice').hide();
+                } else {
+                    // Không có camera: hiện thị thông báo hướng dẫn
+                    $('#no-camera-notice').show();
+                    $('#dashboard-video-feed').hide();
+                    // Vẫn cập nhật các KPI khác (thời gian, cảnh báo...)
+                    $('#srv-cam-badge').attr('class', 'badge badge-warning').text('Chưa có Camera');
+                    $('#srv-cam-detail').text('Vui lòng thêm camera client_camera');
+                    $('#srv-ai-badge').attr('class', 'badge badge-secondary').text('Chưa kởch hoạt');
+                    $('#srv-ai-detail').text('Cần camera để sử dụng AI');
                 }
-                updateDashboardData();
-                setInterval(updateDashboardData, 2000);
+                // Luôn cập nhật các số liệu khác bất kể có camera hay không
+                updateOtherDashboardData();
+                setInterval(function() {
+                    if (window._dashboardCamId) updateDashboardData();
+                    updateOtherDashboardData();
+                }, 2000);
             },
             error: function() {
-                updateDashboardData();
-                setInterval(updateDashboardData, 2000);
+                $('#no-camera-notice').show();
+                $('#dashboard-video-feed').hide();
             }
         });
     });
