@@ -43,7 +43,11 @@ def create_app():
         
         # Bắt buộc bật SSL (Aiven yêu cầu) nhưng bỏ qua việc tải file chứng chỉ rườm rà
         if 'mysql+pymysql' in db_url:
-            flask_app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {'connect_args': {'ssl': {}}}
+            flask_app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
+                'connect_args': {'ssl': {}},
+                'pool_pre_ping': True,
+                'pool_recycle': 280
+            }
     else:
         # Fallback về SQLite khi chạy trên máy cá nhân
         db_path = os.path.abspath(
