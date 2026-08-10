@@ -448,6 +448,8 @@
             success: function(cameras) {
                 if (cameras && cameras.length > 0) {
                     window._dashboardCamId = cameras[0].id;
+                    // Cập nhật thẻ ảnh stream video sang đúng camera được lấy
+                    $('#dashboard-video-feed').attr('src', '/video_feed/' + window._dashboardCamId);
                 }
                 updateDashboardData();
                 setInterval(updateDashboardData, 2000);
