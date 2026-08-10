@@ -1,0 +1,148 @@
+{% extends "base.html" %}
+
+{% block title %}Trạm Phát Camera Thiết Bị{% endblock %}
+
+{% block content %}
+<div class="content-wrapper">
+    <section class="content-header">
+        <div class="container-fluid">
+            <div class="row mb-2">
+                <div class="col-sm-6">
+                    <h1><i class="fas fa-broadcast-tower text-success"></i> Trạm Phát Camera (Camera ID: {{ camera_id }})</h1>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="content">
+        <div class="container-fluid">
+            <div class="row">
+                <div class="col-md-8 mx-auto">
+                    <div class="card card-success card-outline">
+                        <div class="card-header">
+                            <h3 class="card-title">Truy cập Camera Trực Tiếp và Phát Tín Hiệu</h3>
+                        </div>
+                        <div class="card-body text-center">
+                            <p class="text-muted">Nhấn nút bên dưới để cấp quyền cho trình duyệt truy cập vào camera trên thiết bị của bạn. Hình ảnh sẽ liên tục được truyền về Server để AI phân tích.</p>
+                            
+                            <video id="client-video" autoplay playsinline muted style="width: 100%; max-width: 600px; background-color: #000; border-radius: 8px; margin-bottom: 20px;"></video>
+                            <canvas id="capture-canvas" style="display: none;"></canvas>
+
+                            <br>
+                            <button id="start-camera" class="btn btn-success btn-lg"><i class="fas fa-video"></i> Bật Camera & Bắt đầu Phát</button>
+                            <button id="stop-camera" class="btn btn-danger btn-lg" style="display: none;"><i class="fas fa-stop"></i> Dừng Phát</button>
+                            
+                            <div id="status-message" class="alert alert-info mt-3" style="display: none;"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    const cameraId = {{ camera_id }};
+    const videoElement = document.getElementById('client-video');
+    const canvasElement = document.getElementById('capture-canvas');
+    const ctx = canvasElement.getContext('2d');
+    const startBtn = document.getElementById('start-camera');
+    const stopBtn = document.getElementById('stop-camera');
+    const statusMsg = document.getElementById('status-message');
+    
+    let currentStream = null;
+    let streamInterval = null;
+
+    startBtn.addEventListener('click', async () => {
+        try {
+            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                throw new Error("Trình duyệt không hỗ trợ Camera. Vui lòng dùng HTTPS hoặc truy cập qua localhost.");
+            }
+            
+            // Yêu cầu quyền truy cập camera (ưu tiên camera sau, nếu không có thì dùng camera mặc định)
+            const stream = await navigator.mediaDevices.getUserMedia({ 
+                video: { facingMode: { ideal: 'environment' } }, 
+                audio: false 
+            });
+            videoElement.srcObject = stream;
+            currentStream = stream;
+            
+            // Bắt buộc gọi play() cho một số trình duyệt khó tính như iOS Safari
+            try {
+                await videoElement.play();
+            } catch (playErr) {
+                console.warn("Autoplay bị chặn, cần tương tác thêm:", playErr);
+            }
+            
+            startBtn.style.display = 'none';
+            stopBtn.style.display = 'inline-block';
+            statusMsg.className = 'alert alert-info mt-3';
+            statusMsg.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Đang phát dữ liệu lên Server...';
+            statusMsg.style.display = 'block';
+
+            // Đợi video có kích thước để thiết lập canvas
+            videoElement.onloadedmetadata = () => {
+                // Resize canvas để ảnh tải lên nhẹ bớt (VD: 640x480 thay vì FullHD)
+                const ratio = videoElement.videoWidth / videoElement.videoHeight;
+                canvasElement.width = 640;
+                canvasElement.height = 640 / ratio;
+
+                // Bắt đầu gửi frame liên tục (5 fps = 200ms)
+                streamInterval = setInterval(sendFrameToServer, 200);
+            };
+
+        } catch (err) {
+            console.error("Lỗi khi truy cập camera:", err);
+            statusMsg.className = 'alert alert-danger mt-3';
+            statusMsg.innerHTML = "Không thể truy cập camera. Vui lòng kiểm tra quyền trên trình duyệt: " + err.message;
+            statusMsg.style.display = 'block';
+        }
+    });
+
+    stopBtn.addEventListener('click', () => {
+        if (currentStream) {
+            currentStream.getTracks().forEach(track => track.stop());
+            videoElement.srcObject = null;
+            currentStream = null;
+            
+            if (streamInterval) {
+                clearInterval(streamInterval);
+                streamInterval = null;
+            }
+
+            startBtn.style.display = 'inline-block';
+            stopBtn.style.display = 'none';
+            statusMsg.className = 'alert alert-warning mt-3';
+            statusMsg.innerHTML = '<i class="fas fa-info-circle"></i> Đã dừng phát video.';
+        }
+    });
+
+    async function sendFrameToServer() {
+        if (videoElement.readyState === videoElement.HAVE_ENOUGH_DATA) {
+            // Vẽ frame hiện tại lên canvas
+            ctx.drawImage(videoElement, 0, 0, canvasElement.width, canvasElement.height);
+            
+            // Chuyển thành base64 JPEG với chất lượng 0.7
+            const base64Image = canvasElement.toDataURL('image/jpeg', 0.7);
+
+            try {
+                const response = await fetch(`/api/cameras/${cameraId}/upload_frame`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ image: base64Image })
+                });
+
+                if (!response.ok) {
+                    console.error('Lỗi khi gửi frame:', await response.text());
+                }
+            } catch (err) {
+                console.error('Lỗi kết nối mạng:', err);
+            }
+        }
+    }
+</script>
+{% endblock %}

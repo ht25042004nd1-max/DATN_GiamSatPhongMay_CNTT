@@ -72,7 +72,7 @@
                                 </button>
                                 <!-- Mở khóa -->
                                 {% if u.is_locked() %}
-                                <form action="{{ url_for('main.unlock_account', user_id=u.id) }}" method="POST" style="display:inline;">
+                                <form action="{{ url_for('main.unlock_account', user_id=u.id) }}" method="POST" style="display:inline;" onsubmit="return promptForSecurityCode(this)">
                                     <button class="btn btn-sm btn-success" title="Mở khóa tài khoản" type="submit">
                                         <i class="fas fa-unlock"></i>
                                     </button>
@@ -141,6 +141,11 @@
                         <label>Số điện thoại</label>
                         <input type="text" name="phone" class="form-control" placeholder="Số điện thoại">
                     </div>
+                    <hr>
+                    <div class="form-group">
+                        <label class="text-danger"><i class="fas fa-shield-alt"></i> Mã xác thực Admin *</label>
+                        <input type="password" name="security_code" class="form-control" required placeholder="Nhập mã do admin cấp">
+                    </div>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-dismiss="modal">Hủy</button>
@@ -182,6 +187,11 @@
                         <label>Số điện thoại</label>
                         <input type="text" name="phone" id="edit-phone" class="form-control">
                     </div>
+                    <hr>
+                    <div class="form-group">
+                        <label class="text-danger"><i class="fas fa-shield-alt"></i> Mã xác thực Admin *</label>
+                        <input type="password" name="security_code" class="form-control" required placeholder="Nhập mã do admin cấp">
+                    </div>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-dismiss="modal">Hủy</button>
@@ -208,6 +218,11 @@
                         <label>Mật khẩu mới *</label>
                         <input type="password" name="password" class="form-control" required placeholder="Nhập mật khẩu mới" autocomplete="new-password">
                     </div>
+                    <hr>
+                    <div class="form-group">
+                        <label class="text-danger"><i class="fas fa-shield-alt"></i> Mã xác thực Admin *</label>
+                        <input type="password" name="security_code" class="form-control" required placeholder="Nhập mã do admin cấp">
+                    </div>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-dismiss="modal">Hủy</button>
@@ -231,6 +246,11 @@
                 </div>
                 <div class="modal-body">
                     <p>Bạn có chắc chắn muốn xóa tài khoản này không? Hành động này không thể hoàn tác.</p>
+                    <hr>
+                    <div class="form-group">
+                        <label class="text-danger"><i class="fas fa-shield-alt"></i> Mã xác thực Admin *</label>
+                        <input type="password" name="security_code" class="form-control" required placeholder="Nhập mã do admin cấp">
+                    </div>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-dismiss="modal">Hủy</button>
@@ -265,6 +285,19 @@
         $('#delete-title').html('<i class="fas fa-exclamation-triangle"></i> Xóa tài khoản: ' + username);
         $('#form-delete').attr('action', '/accounts/delete/' + id);
         $('#modal-delete').modal('show');
+    }
+
+    function promptForSecurityCode(formElement) {
+        const code = prompt("Vui lòng nhập Mã xác thực (do Admin cấp) để tiếp tục:");
+        if (code === null || code.trim() === "") {
+            return false;
+        }
+        const input = document.createElement('input');
+        input.type = 'hidden';
+        input.name = 'security_code';
+        input.value = code;
+        formElement.appendChild(input);
+        return true;
     }
 </script>
 {% endblock %}

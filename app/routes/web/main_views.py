@@ -75,12 +75,14 @@ def video_feed(camera_id):
         return Response('Camera not found', 404)
     cam = _get_camera(camera_id)
     def generate():
+        import time
         while True:
             frame_bytes = cam.get_frame()
             yield (b'--frame\r\n'
                    b'Content-Type: image/jpeg\r\n\r\n'
                    + frame_bytes +
                    b'\r\n')
+            time.sleep(0.05)
     return Response(
         generate(),
         mimetype='multipart/x-mixed-replace; boundary=frame'

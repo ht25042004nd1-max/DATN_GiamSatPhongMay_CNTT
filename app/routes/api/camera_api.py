@@ -73,3 +73,40 @@ def delete_camera(camera_id):
     db.session.commit()
     log_audit('DELETE_CAMERA', 'Camera', camera_id, {'name': name})
     return jsonify({'message': 'Đã xóa camera thành công'})
+
+@camera_bp.route('/api/cameras/<int:camera_id>/upload_frame', methods=['POST'])
+def upload_frame(camera_id):
+    """API nhận frame dạng Base64 từ Client Camera và cập nhật vào CameraManager."""
+    import base64
+    import cv2
+    import numpy as np
+    from app.services.camera_service import camera_manager, ClientCamera
+
+    data = request.get_json()
+    if not data or 'image' not in data:
+        return jsonify({'error': 'No image data'}), 400
+
+    # Lấy base64 string, bỏ phần header (vd: data:image/jpeg;base64,...)
+    image_data = data['image']
+    if ',' in image_data:
+        image_data = image_data.split(',')[1]
+
+    try:
+        # Decode base64 thành mảng bytes
+        img_bytes = base64.b64decode(image_data)
+        np_arr = np.frombuffer(img_bytes, np.uint8)
+        # Decode bytes thành ảnh BGR cho OpenCV
+        frame = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
+
+        if frame is not None:
+            # Lấy camera từ manager (nếu nó là client_camera thì sẽ update được)
+            cam_service = camera_manager.get_camera(camera_id, source="client_camera")
+            if isinstance(cam_service, ClientCamera):
+                cam_service.update_frame(frame)
+                return jsonify({'status': 'ok'}), 200
+            else:
+                return jsonify({'error': 'Camera này không phải là ClientCamera'}), 400
+        else:
+            return jsonify({'error': 'Invalid image format'}), 400
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500

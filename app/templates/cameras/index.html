@@ -88,7 +88,7 @@
                 <div class="form-group">
                     <label>Nguồn video (RTSP / Index webcam)</label>
                     <input type="text" id="add-cam-rtsp" class="form-control" placeholder="0 (webcam), hoặc rtsp://...">
-                    <small class="form-text text-muted">Nhập số (0, 1...) cho webcam USB, hoặc URL RTSP đầy đủ cho IP Camera.</small>
+                    <small class="form-text text-muted">Nhập số (0, 1...) cho webcam USB, URL RTSP cho IP Camera, hoặc nhập <b>client_camera</b> để phát từ thiết bị truy cập.</small>
                 </div>
                 <div class="form-check">
                     <input type="checkbox" class="form-check-input" id="add-cam-active" checked>
@@ -131,6 +131,7 @@
                 <div class="form-group">
                     <label>Nguồn video (RTSP / Index)</label>
                     <input type="text" id="edit-cam-rtsp" class="form-control">
+                    <small class="form-text text-muted">Nhập <b>client_camera</b> để dùng camera thiết bị truy cập.</small>
                 </div>
                 <div class="form-check">
                     <input type="checkbox" class="form-check-input" id="edit-cam-active">
