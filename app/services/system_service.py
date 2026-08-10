@@ -27,7 +27,12 @@ def get_system_metrics() -> dict:
     cpu_count = psutil.cpu_count(logical=True)
     
     virtual_mem = psutil.virtual_memory()
-    disk_mem = psutil.disk_usage('/')
+    # Tự detect đường dẫn đĩa cứng: Windows dùng 'C:\\', Linux dùng '/'
+    disk_root = 'C:\\' if sys.platform.startswith('win') else '/'
+    try:
+        disk_mem = psutil.disk_usage(disk_root)
+    except Exception:
+        disk_mem = psutil.disk_usage('.')
     
     uptime_seconds = int(time.time() - _start_time)
     hours, remainder = divmod(uptime_seconds, 3600)

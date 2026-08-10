@@ -272,6 +272,14 @@
                         </a>
                         {% endif %}
                     </div>
+                    <div id="streamer-notice" class="text-white p-4" style="display:none;">
+                        <i class="fas fa-broadcast-tower fa-2x mb-2 text-info"></i>
+                        <p class="mb-2">Camera đang chờ tín hiệu từ thiết bị của bạn.</p>
+                        <a id="streamer-link" href="#" target="_blank" class="btn btn-info btn-sm">
+                            <i class="fas fa-video mr-1"></i> Bật Camera Thiết Bị (Streamer)
+                        </a>
+                        <p class="text-muted mt-2 small">Mở link trên và bấm "Bật Camera" để truyền hình ảnh lên</p>
+                    </div>
                     <img src=""
                          alt="Camera Stream"
                          class="img-fluid"
@@ -458,12 +466,34 @@
             method: 'GET',
             success: function(cameras) {
                 if (cameras && cameras.length > 0) {
-                    window._dashboardCamId = cameras[0].id;
-                    // Hiện video stream và ẩn thông báo
-                    $('#dashboard-video-feed')
-                        .attr('src', '/video_feed/' + window._dashboardCamId)
-                        .show();
-                    $('#no-camera-notice').hide();
+                    const cam = cameras[0];
+                    window._dashboardCamId = cam.id;
+                    // Nếu là client_camera: hiện thông báo hướng dẫn streamer
+                    if (cam.rtsp_url === 'client_camera') {
+                        $('#streamer-notice').show();
+                        $('#no-camera-notice').hide();
+                        $('#dashboard-video-feed').hide();
+                        // Cập nhật link streamer đúng camera_id
+                        $('#streamer-link').attr('href', '/streamer/' + cam.id);
+                        // Vẫn load video stream (sẽ hiện khi streamer bật)
+                        setTimeout(function() {
+                            $('#dashboard-video-feed')
+                                .attr('src', '/video_feed/' + cam.id)
+                                .off('load').on('load', function() {
+                                    if (this.naturalWidth > 1) { // có frame thực
+                                        $('#streamer-notice').hide();
+                                        $(this).show();
+                                    }
+                                }).show();
+                        }, 2000);
+                    } else {
+                        // Camera thông thường: hiện video ngay
+                        $('#dashboard-video-feed')
+                            .attr('src', '/video_feed/' + cam.id)
+                            .show();
+                        $('#no-camera-notice').hide();
+                        $('#streamer-notice').hide();
+                    }
                 } else {
                     // Không có camera: hiện thị thông báo hướng dẫn
                     $('#no-camera-notice').show();
