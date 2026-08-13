@@ -41,11 +41,17 @@ def create_roi():
     if len(points) < 3:
         return jsonify({'error': 'Polygon cần ít nhất 3 điểm'}), 400
 
+    raw_threshold = data.get('duration_threshold')
+    try:
+        duration_threshold = int(raw_threshold) if raw_threshold is not None else 5
+    except (ValueError, TypeError):
+        duration_threshold = 5
+
     roi = ROI(
         name               = data.get('name', 'ROI mới'),
         level              = data.get('level', 'medium'),
         is_active          = data.get('is_active', True),
-        duration_threshold = int(data.get('duration_threshold', 5)),
+        duration_threshold = max(3, min(30, duration_threshold)),
         camera_id          = data.get('camera_id')
     )
     roi.points = points  # dùng setter để serialize JSON
@@ -70,17 +76,20 @@ def create_roi():
 def update_roi(roi_id):
     """Sửa ROI (tên, level, threshold, bật/tắt, points)."""
     roi  = ROI.query.get_or_404(roi_id)
-    data = request.get_json()
+    data = request.get_json() or {}
 
-    if 'name' in data:
+    if 'name' in data and data['name']:
         roi.name = data['name']
-    if 'level' in data:
+    if 'level' in data and data['level']:
         roi.level = data['level']
     if 'is_active' in data:
         roi.is_active = bool(data['is_active'])
     if 'duration_threshold' in data:
-        val = int(data['duration_threshold'])
-        roi.duration_threshold = max(3, min(30, val))  # clamp 3–30
+        try:
+            val = int(data['duration_threshold'])
+            roi.duration_threshold = max(3, min(30, val))  # clamp 3–30
+        except (ValueError, TypeError):
+            pass
     if 'camera_id' in data:
         roi.camera_id = data['camera_id']
     if 'points' in data:

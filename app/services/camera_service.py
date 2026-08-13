@@ -396,8 +396,12 @@ class ClientCamera(CameraService):
 
             # Xử lý AI Pose trên frame
             if self.pose_enabled and self._pose:
-                processed = self._pose.process_frame(frame.copy())
-                result = self._pose.get_result()
+                try:
+                    processed = self._pose.process_frame(frame.copy())
+                    result = self._pose.get_result()
+                except Exception as pose_err:
+                    processed = frame.copy()
+                    result = {"pose": "AI error", "confidence": 0.0, "is_detected": False, "persons": {}}
 
                 try:
                     from app.services.alert_engine import alert_engine

@@ -156,7 +156,7 @@ def create_account():
     from app.models.user import User
 
     security_code = request.form.get('security_code', '')
-    if security_code != os.getenv('ADMIN_SECURITY_CODE', '199999'):
+    if security_code != os.getenv('ADMIN_SECURITY_CODE', 'CHANGE-ME-IN-ENV'):
         flash('Mã xác thực Admin không chính xác!', 'danger')
         return redirect(url_for('main.accounts'))
 
@@ -214,7 +214,7 @@ def edit_account(user_id):
     from app.models.user import User
 
     security_code = request.form.get('security_code', '')
-    if security_code != os.getenv('ADMIN_SECURITY_CODE', '199999'):
+    if security_code != os.getenv('ADMIN_SECURITY_CODE', 'CHANGE-ME-IN-ENV'):
         flash('Mã xác thực Admin không chính xác!', 'danger')
         return redirect(url_for('main.accounts'))
 
@@ -260,7 +260,7 @@ def reset_password(user_id):
     from app.models.user import User
 
     security_code = request.form.get('security_code', '')
-    if security_code != os.getenv('ADMIN_SECURITY_CODE', '199999'):
+    if security_code != os.getenv('ADMIN_SECURITY_CODE', 'CHANGE-ME-IN-ENV'):
         flash('Mã xác thực Admin không chính xác!', 'danger')
         return redirect(url_for('main.accounts'))
 
@@ -291,7 +291,7 @@ def unlock_account(user_id):
     from app.models.user import User
 
     security_code = request.form.get('security_code', '')
-    if security_code != os.getenv('ADMIN_SECURITY_CODE', '199999'):
+    if security_code != os.getenv('ADMIN_SECURITY_CODE', 'CHANGE-ME-IN-ENV'):
         flash('Mã xác thực Admin không chính xác!', 'danger')
         return redirect(url_for('main.accounts'))
 
@@ -317,7 +317,7 @@ def delete_account(user_id):
     from app.models.user import User
 
     security_code = request.form.get('security_code', '')
-    if security_code != os.getenv('ADMIN_SECURITY_CODE', '199999'):
+    if security_code != os.getenv('ADMIN_SECURITY_CODE', 'CHANGE-ME-IN-ENV'):
         flash('Mã xác thực Admin không chính xác!', 'danger')
         return redirect(url_for('main.accounts'))
 

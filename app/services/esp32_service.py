@@ -46,9 +46,13 @@ def _get_iot_config() -> dict:
         devices = 'led,buzzer,relay'
         buzzer_dur = 10
 
+    raw_ip = esp32_ip.strip()
+    if raw_ip and not raw_ip.startswith(('http://', 'https://')):
+        raw_ip = f"http://{raw_ip}"
+
     return {
         'enabled': enabled,
-        'esp32_ip': esp32_ip.strip(),
+        'esp32_ip': raw_ip,
         'devices': [d.strip() for d in devices.split(',') if d.strip()],
         'buzzer_dur': buzzer_dur
     }

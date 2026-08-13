@@ -226,9 +226,6 @@
             statusMsg.innerHTML = '<i class="fas fa-check-circle mr-1"></i> <b>Đã kết nối thành công!</b> Tín hiệu camera đang được truyền về máy chủ để AI phân tích.';
             statusMsg.style.display = 'block';
 
-            // Load lại danh sách camera nếu lúc trước chưa có nhãn
-            loadCameras();
-
         } catch (err) {
             console.error("Lỗi truy cập camera:", err);
             statusMsg.className = 'alert alert-danger mt-3';
@@ -258,6 +255,8 @@
         statusMsg.innerHTML = '<i class="fas fa-info-circle mr-1"></i> Đã dừng phát tín hiệu video.';
     });
 
+    let consecutiveErrors = 0;
+
     async function sendFrameToServer() {
         if (isSending) return; // Tránh dồn ứ request khi mạng chậm
         if (videoElement.readyState >= videoElement.HAVE_CURRENT_DATA) {
@@ -274,12 +273,21 @@
                 });
 
                 if (response.ok) {
+                    consecutiveErrors = 0;
                     totalFramesSent++;
                     lastSecondFrames++;
                     metricFrames.innerText = totalFramesSent;
+                } else {
+                    consecutiveErrors++;
                 }
             } catch (err) {
+                consecutiveErrors++;
                 console.warn('Lỗi mạng truyền frame:', err);
+                if (consecutiveErrors > 15) {
+                    statusMsg.className = 'alert alert-danger mt-3';
+                    statusMsg.innerHTML = '<i class="fas fa-exclamation-triangle mr-1"></i> <b>Cảnh báo mất kết nối:</b> Không thể gửi dữ liệu hình ảnh về máy chủ. Vui lòng kiểm tra lại mạng WiFi/Internet.';
+                    statusMsg.style.display = 'block';
+                }
             } finally {
                 isSending = false;
             }

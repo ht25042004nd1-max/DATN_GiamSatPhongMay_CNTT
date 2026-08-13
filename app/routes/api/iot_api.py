@@ -73,13 +73,12 @@ t_hb.start()
 def iot_heartbeat():
     """
     Heartbeat API: Nhận tín hiệu từ ESP32 gửi lên định kỳ.
-    JSON: { "ip": "192.168.1.50", "devices": { "led": 0, "buzzer": 0, "relay": 1 } }
+    JSON: { "ip": "192.168.1.50", "devices": { "led": 0, "buzzer": 0, "relay": 1 }, "sensors": {...} }
     """
     data = request.get_json() or {}
     ip = data.get('ip', request.remote_addr)
-    devices = data.get('devices', {})
     
-    register_heartbeat(ip, devices)
+    register_heartbeat(ip, data)
     return jsonify({'status': 'ok', 'received_at': time.time()})
 
 
@@ -97,8 +96,16 @@ def iot_control_manual():
     """Điều khiển thiết bị thủ công từ UI Admin."""
     data = request.get_json() or {}
     device = data.get('device')
-    status = int(data.get('status', 0))
-    duration = int(data.get('duration', 0))
+    
+    try:
+        status = int(data.get('status', 0))
+    except (ValueError, TypeError):
+        status = 0
+
+    try:
+        duration = int(data.get('duration', 0))
+    except (ValueError, TypeError):
+        duration = 0
 
     if device not in ['led', 'buzzer', 'relay']:
         return jsonify({'error': 'Thiết bị không hợp lệ'}), 400

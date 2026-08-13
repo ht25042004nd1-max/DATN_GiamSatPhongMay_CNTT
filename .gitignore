@@ -54,3 +54,11 @@ reports/*.pdf
 htmlcov/
 .coverage
 coverage.xml
+
+# === File test chứa thông tin nhạy cảm (credentials, IP camera...) ===
+test_ezviz.py
+test_stoop_telegram.py
+scratch_test.py
+scratch_*.py
+test_*.py
+!tests/

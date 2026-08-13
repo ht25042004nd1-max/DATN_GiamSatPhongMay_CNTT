@@ -101,16 +101,31 @@ class AlertEngine:
         self._cache_ts   = 0.0
         self._CACHE_TTL  = 5.0
 
+    def _run_in_app_context(self, fn):
+        """Đảm bảo hàm thực thi bên trong Flask Application Context."""
+        try:
+            from flask import has_app_context, current_app
+            if has_app_context():
+                return fn()
+            elif current_app:
+                with current_app.app_context():
+                    return fn()
+        except Exception:
+            pass
+        return fn()
+
     # ── Load ROI có cache ──────────────────────────────────
     def _get_active_rois(self):
         now = time.time()
         if now - self._cache_ts > self._CACHE_TTL:
-            try:
+            def _do_fetch():
                 from app.models.roi import ROI
-                self._rois_cache = ROI.query.filter_by(is_active=True).all()
-                self._cache_ts   = now
-            except Exception:
-                pass
+                return ROI.query.filter_by(is_active=True).all()
+            
+            res = self._run_in_app_context(_do_fetch)
+            if res is not None:
+                self._rois_cache = res
+                self._cache_ts = now
         return self._rois_cache
 
     def invalidate_cache(self):
@@ -197,87 +212,93 @@ class AlertEngine:
     # ── Tạo Event ─────────────────────────────────────────
     def _create_event(self, tracker: PersonROITracker, roi, pose: str,
                       confidence: float = 0.0, person_id: int = 0):
-        try:
-            from app import db
-            from app.models.event import Event
+        def _do_create():
+            try:
+                from app import db
+                from app.models.event import Event
 
-            level = POSE_LEVEL.get(pose, roi.level)
-            cam_id = getattr(roi, 'camera_id', None) or 1
-            room_id = None
-            if cam_id:
+                level = POSE_LEVEL.get(pose, roi.level)
+                cam_id = getattr(roi, 'camera_id', None) or 1
+                room_id = None
+                if cam_id:
+                    try:
+                        from app.models.camera import Camera
+                        cam_obj = Camera.query.get(cam_id)
+                        if cam_obj:
+                            room_id = cam_obj.room_id
+                    except Exception:
+                        pass
+
+                ev = Event(
+                    roi_id           = roi.id,
+                    roi_name         = roi.name,
+                    camera_id        = cam_id,
+                    room_id          = room_id,
+                    pose             = pose,
+                    level            = level,
+                    person_count     = 1,
+                    started_at       = datetime.utcnow(),
+                    status           = 'pending',
+                    confidence_score = confidence,
+                )
+                db.session.add(ev)
+                db.session.commit()
+
+                tracker.active_event_id = ev.id
+                tracker.cooldown_until  = time.time() + COOLDOWN_SECONDS
+                tracker.violation_start = None
+
+                print(f"[Alert] Event #{ev.id} | ROI: {roi.name} | Person P{person_id+1} | Pose: {pose}")
+
+                # Đọc chế độ gửi Telegram
                 try:
-                    from app.models.camera import Camera
-                    cam_obj = Camera.query.get(cam_id)
-                    if cam_obj:
-                        room_id = cam_obj.room_id
+                    from app.models.setting import SystemSetting
+                    send_mode = SystemSetting.get('telegram_send_mode', 'mandatory')
                 except Exception:
-                    pass
+                    send_mode = 'mandatory'
 
-            ev = Event(
-                roi_id           = roi.id,
-                roi_name         = roi.name,
-                camera_id        = cam_id,
-                room_id          = room_id,
-                pose             = pose,
-                level            = level,
-                person_count     = 1,
-                started_at       = datetime.utcnow(),
-                status           = 'pending',
-                confidence_score = confidence,
-            )
-            db.session.add(ev)
-            db.session.commit()
+                # Chụp ảnh + Telegram
+                try:
+                    from app.services.telegram_service import send_alert
+                    from app.services.camera_service import camera_manager
+                    cam_service = camera_manager.get_camera(cam_id)
+                    frame_bytes = cam_service.capture_snapshot(event_id=ev.id) if cam_service else None
+                    send_alert(ev, frame_bytes=frame_bytes, send_mode=send_mode)
+                except Exception as tg_err:
+                    print(f"[Alert] Telegram: {tg_err}")
 
-            tracker.active_event_id = ev.id
-            tracker.cooldown_until  = time.time() + COOLDOWN_SECONDS
-            tracker.violation_start = None
+                # Kích hoạt IoT
+                try:
+                    from app.services.esp32_service import trigger_alert_hardware
+                    trigger_alert_hardware(ev)
+                except Exception as iot_err:
+                    print(f"[Alert] IoT: {iot_err}")
 
-            print(f"[Alert] Event #{ev.id} | ROI: {roi.name} | Person P{person_id+1} | Pose: {pose}")
+            except Exception as e:
+                print(f"[Alert] Lỗi tạo event: {e}")
 
-            # Đọc chế độ gửi Telegram
-            try:
-                from app.models.setting import SystemSetting
-                send_mode = SystemSetting.get('telegram_send_mode', 'mandatory')
-            except Exception:
-                send_mode = 'mandatory'
-
-            # Chụp ảnh + Telegram
-            try:
-                from app.services.telegram_service import send_alert
-                from app.services.camera_service import camera_manager
-                cam_service = camera_manager.get_camera(cam_id)
-                frame_bytes = cam_service.capture_snapshot(event_id=ev.id) if cam_service else None
-                send_alert(ev, frame_bytes=frame_bytes, send_mode=send_mode)
-            except Exception as tg_err:
-                print(f"[Alert] Telegram: {tg_err}")
-
-            # Kích hoạt IoT
-            try:
-                from app.services.esp32_service import trigger_alert_hardware
-                trigger_alert_hardware(ev)
-            except Exception as iot_err:
-                print(f"[Alert] IoT: {iot_err}")
-
-        except Exception as e:
-            print(f"[Alert] Lỗi tạo event: {e}")
+        self._run_in_app_context(_do_create)
 
     # ── Đóng Event ────────────────────────────────────────
     def _close_event(self, tracker: PersonROITracker):
-        try:
-            from app import db
-            from app.models.event import Event
-            ev = Event.query.get(tracker.active_event_id)
-            if ev and ev.ended_at is None:
-                ev.ended_at = datetime.utcnow()
-                db.session.commit()
-            tracker.active_event_id = None
+        def _do_close():
             try:
-                from app.services.esp32_service import send_iot_command
-                send_iot_command('relay', 0)
-            except Exception:
-                pass
-        except Exception as e:
-            print(f"[Alert] Lỗi đóng event: {e}")
+                from app import db
+                from app.models.event import Event
+                ev = Event.query.get(tracker.active_event_id)
+                if ev and ev.ended_at is None:
+                    ev.ended_at = datetime.utcnow()
+                    db.session.commit()
+                tracker.active_event_id = None
+                try:
+                    from app.services.esp32_service import send_iot_command
+                    send_iot_command('relay', 0)
+                except Exception:
+                    pass
+            except Exception as e:
+                print(f"[Alert] Lỗi đóng event: {e}")
+
+        self._run_in_app_context(_do_close)
 
     def get_recent_events_count(self) -> int:
         try:

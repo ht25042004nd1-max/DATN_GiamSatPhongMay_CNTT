@@ -89,15 +89,15 @@ void loop() {
   // Đọc mốc thời gian hiện tại
   unsigned long now = millis();
 
-  // ── XỬ LÝ HẸN GIỜ TỰ TẮT BUZZER (NON-BLOCKING) ──────────────────
-  if (buzzer_active && now >= buzzer_off_time) {
+  // ── XỬ LÝ HẸN GIỜ TỰ TẮT BUZZER (NON-BLOCKING SAU TRÀN MILLIS) ──
+  if (buzzer_active && (long)(now - buzzer_off_time) >= 0) {
     digitalWrite(BUZZER_PIN, LOW);
     buzzer_active = false;
     Serial.println("[ESP32] Coi Buzzer tu dong tat.");
   }
 
-  // ── XỬ LÝ HẸN GIỜ TỰ TẮT LED (NON-BLOCKING) ─────────────────────
-  if (led_active && now >= led_off_time) {
+  // ── XỬ LÝ HẸN GIỜ TỰ TẮT LED (NON-BLOCKING SAU TRÀN MILLIS) ─────
+  if (led_active && (long)(now - led_off_time) >= 0) {
     digitalWrite(LED_PIN, LOW);
     led_active = false;
     Serial.println("[ESP32] Den LED tu dong tat.");
@@ -127,14 +127,19 @@ void handleControl() {
   }
 
   const char* device = doc["device"]; // "led", "buzzer", "relay"
-  int status = doc["status"];         // 1: bật, 0: tắt
-  int duration = doc["duration"];     // Thời gian tự tắt (giây)
+  if (!device) {
+    server.send(400, "application/json", "{\"error\":\"Missing or invalid 'device' parameter\"}");
+    return;
+  }
+
+  int status = doc["status"] | 0;         // 1: bật, 0: tắt
+  int duration = doc["duration"] | 0;     // Thời gian tự tắt (giây)
 
   if (strcmp(device, "led") == 0) {
     digitalWrite(LED_PIN, status ? HIGH : LOW);
     if (status == 1 && duration > 0) {
       led_active = true;
-      led_off_time = millis() + (duration * 1000);
+      led_off_time = millis() + ((unsigned long)duration * 1000UL);
     } else {
       led_active = false;
     }
@@ -144,7 +149,7 @@ void handleControl() {
     digitalWrite(BUZZER_PIN, status ? HIGH : LOW);
     if (status == 1 && duration > 0) {
       buzzer_active = true;
-      buzzer_off_time = millis() + (duration * 1000);
+      buzzer_off_time = millis() + ((unsigned long)duration * 1000UL);
     } else {
       buzzer_active = false;
     }
@@ -175,7 +180,11 @@ void sendHeartbeat() {
     StaticJsonDocument<200> doc;
     doc["ip"] = WiFi.localIP().toString();
     
+    #if defined(ARDUINOJSON_VERSION_MAJOR) && ARDUINOJSON_VERSION_MAJOR >= 7
+    JsonObject devices = doc["devices"].to<JsonObject>();
+    #else
     JsonObject devices = doc.createNestedObject("devices");
+    #endif
     devices["led"] = digitalRead(LED_PIN);
     devices["buzzer"] = digitalRead(BUZZER_PIN);
     devices["relay"] = digitalRead(RELAY_PIN);
@@ -192,7 +201,8 @@ void sendHeartbeat() {
     }
     http.end();
   } else {
-    Serial.println("[Heartbeat] Mat ket noi WiFi, khong the gui!");
+    Serial.println("[Heartbeat] Mat ket noi WiFi, dang tu dong ket noi lai...");
+    WiFi.reconnect();
   }
 }
 
