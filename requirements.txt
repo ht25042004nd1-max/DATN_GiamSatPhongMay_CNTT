@@ -16,7 +16,8 @@ cryptography==42.0.5          # Bắt buộc để giải mã mật khẩu cachi
 
 # --- Computer Vision & AI ---
 opencv-python-headless==4.11.0.86      # Xử lý hình ảnh/video từ camera (bản headless dùng cho Server)
-mediapipe==0.10.35            # Nhận diện tư thế cơ thể (Pose Detection)
+ultralytics>=8.0.0                    # YOLOv8-Pose + ByteTrack (model chính nhận diện tư thế)
+mediapipe==0.10.35            # Fallback nếu YOLOv8 không load được (Pose Detection 33 kpts)
 
 # --- Telegram Bot (gửi cảnh báo) ---
 requests==2.32.3              # Gọi HTTP API (Telegram Bot API, IoT mock)

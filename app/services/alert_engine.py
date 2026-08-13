@@ -1,18 +1,29 @@
 # ============================================================
-# app/services/alert_engine.py — Engine xử lý logic cảnh báo (v2.0)
+# app/services/alert_engine.py — Engine xử lý logic cảnh báo (v3.0)
 #
-# Nâng cấp: xử lý dict nhiều người {person_id: info} từ PoseAnalyzer v2.
+# Nâng cấp v3.0: tương thích PoseAnalyzer v3.0 (YOLOv8-Pose + ByteTrack)
 # Pipeline mỗi frame:
-#   1. Nhận persons dict từ PoseAnalyzer
-#   2. Với mỗi person_id: kiểm tra hip_norm có trong ROI nào không
+#   1. Nhận persons dict từ PoseAnalyzer (có wrist_norm, angle_debug)
+#   2. Với mỗi person_id: kiểm tra hip_norm VÀ/HOẶC wrist_norm trong ROI
 #   3. Nếu tư thế ∈ ALERT_POSES VÀ is_stooping=True VÀ trong ROI → tạo Event
 #   4. Cooldown 60s per (person_id × roi_id): tránh spam
-#   5. Đóng event khi người rời ROI hoặc đứng lại
+#   5. Debounce: cho phép gián đoạn ngắn < DEBOUNCE_SECONDS mà không reset bộ đếm
+#   6. Đóng event khi người rời ROI hoặc đứng lại
+#   7. Ghi JSON structured event log để tính precision/recall (Nhiệm vụ 4)
 # ============================================================
 import time
+import json
 import threading
+import os
 from datetime import datetime
 from typing import Optional
+from pathlib import Path
+
+# ─── Đường dẫn file JSON event log (Nhiệm vụ 4) ──────────
+_LOG_DIR  = os.path.abspath(
+    os.path.join(os.path.dirname(__file__), '..', '..', 'reports')
+)
+_LOG_PATH = os.path.join(_LOG_DIR, 'event_log.jsonl')   # JSON Lines format
 
 
 # ─── Tư thế kích hoạt cảnh báo ────────────────────────────
@@ -25,7 +36,12 @@ POSE_LEVEL = {
     'Dung':      'low',
 }
 
-COOLDOWN_SECONDS = 60
+COOLDOWN_SECONDS   = 60
+
+# ─── Debounce ROI (Nhiệm vụ 3) ────────────────────────────
+# Cho phép gián đoạn ngắn < DEBOUNCE_SECONDS mà không reset bộ đếm dwell-time
+# Ví dụ: occlusion thoáng qua, tracker nhập nháy 1 frame → không mất dấu
+DEBOUNCE_SECONDS   = 2.0
 
 
 # ─── Point-In-Polygon (Ray Casting) ───────────────────────
@@ -55,6 +71,10 @@ def point_in_polygon(px: float, py: float, polygon: list) -> bool:
 class PersonROITracker:
     """
     Theo dõi trạng thái vi phạm của một người tại một ROI cụ thể.
+
+    v3.0: Thêm debounce — cho phép gián đoạn ngắn < DEBOUNCE_SECONDS
+    (occlusion thoáng qua, track nhập nháy) mà không reset bộ đếm về 0.
+    Giúp dwell-time counter không bị phá vỡ bởi noise ngắn hạn.
     """
     def __init__(self, roi_id: int, roi_name: str, threshold: int, level: str):
         self.roi_id          = roi_id
@@ -65,15 +85,61 @@ class PersonROITracker:
         self.current_pose    = ''
         self.cooldown_until  = 0.0
         self.active_event_id: Optional[int] = None
+        # Debounce state (Nhiệm vụ 3)
+        self._last_in_roi_time: Optional[float] = None  # Lần cuối trong ROI
+        self._debounce_active: bool = False              # Đang trong window debounce
 
     def is_in_cooldown(self) -> bool:
         return time.time() < self.cooldown_until
 
+    def reset_hard(self):
+        """Reset hoàn toàn — người đã rời ROI quá lâu (> DEBOUNCE_SECONDS)."""
+        self.violation_start   = None
+        self.current_pose      = ''
+        self._last_in_roi_time = None
+        self._debounce_active  = False
+
     def reset(self):
-        self.violation_start = None
-        self.current_pose    = ''
+        """Alias tương thích ngược."""
+        self.reset_hard()
+
+    def notify_in_roi(self, pose: str):
+        """
+        Gọi mỗi frame khi người CÒN trong ROI.
+        Cập nhật bộ đếm dwell-time.
+        """
+        now = time.time()
+        self._last_in_roi_time = now
+        self._debounce_active  = False
+
+        if self.current_pose != pose:
+            # Tư thế thay đổi → reset thời điểm bắt đầu
+            self.violation_start = now
+            self.current_pose    = pose
+        elif self.violation_start is None:
+            self.violation_start = now
+
+    def notify_out_roi(self) -> bool:
+        """
+        Gọi mỗi frame khi người KHÔNG trong ROI.
+        Trả về True nếu vẫn đang trong debounce window (bộ đếm chưa reset).
+        Trả về False nếu đã hết debounce → cần reset_hard().
+        """
+        now = time.time()
+        if self._last_in_roi_time is None:
+            return False  # Chưa từng vào ROI
+
+        elapsed_out = now - self._last_in_roi_time
+        if elapsed_out < DEBOUNCE_SECONDS:
+            # Còn trong debounce window → không reset bộ đếm
+            self._debounce_active = True
+            return True
+        else:
+            # Hết debounce → reset hoàn toàn
+            return False
 
     def start_tracking(self, pose: str):
+        """Legacy compat — sử dụng notify_in_roi() thay thế trong v3.0."""
         if self.current_pose != pose:
             self.violation_start = time.time()
             self.current_pose    = pose
@@ -167,13 +233,16 @@ class AlertEngine:
             for pid, info in persons.items():
                 pose        = info.get('pose', '')
                 hip_norm_p  = info.get('hip_norm')
+                wrist_norm_p = info.get('wrist_norm')   # v3.0: thêm wrist check
                 is_stooping = info.get('is_stooping', False)
                 confidence  = info.get('confidence', 0.0)
+                angle_debug = info.get('angle_debug', {})
 
-                if hip_norm_p is None:
+                if hip_norm_p is None and wrist_norm_p is None:
                     continue
 
-                px, py = hip_norm_p
+                # Tọa độ hip để kiểm tra người trong ROI
+                px, py = hip_norm_p if hip_norm_p else (0.0, 0.0)
 
                 for roi in rois:
                     key     = (pid, roi.id)
@@ -185,33 +254,65 @@ class AlertEngine:
                         )
                         self._trackers[key] = tracker
 
-                    in_roi = point_in_polygon(px, py, roi.points)
+                    # Kiểm tra hip trong ROI (như cũ)
+                    in_roi_hip = point_in_polygon(px, py, roi.points) if hip_norm_p else False
 
-                    # Điều kiện vi phạm:
-                    # tư thế nguy hiểm + trong ROI
+                    # Kiểm tra thêm WRIST trong ROI (Nhiệm vụ 3 — phát hiện tay gần Case)
+                    in_roi_wrist = False
+                    if wrist_norm_p:
+                        wx, wy = wrist_norm_p
+                        in_roi_wrist = point_in_polygon(wx, wy, roi.points)
+
+                    # Người được coi là "trong ROI" nếu hip HOẶC wrist trong ROI
+                    in_roi = in_roi_hip or in_roi_wrist
+
+                    # Điều kiện vi phạm: tư thế nguy hiểm + trong ROI
                     if in_roi and pose in ALERT_POSES:
                         if tracker.is_in_cooldown():
                             continue
-                        tracker.start_tracking(pose)
+                        # v3.0: dùng notify_in_roi() thay start_tracking()
+                        tracker.notify_in_roi(pose)
                         if tracker.elapsed() >= roi.duration_threshold:
-                            self._create_event(tracker, roi, pose, confidence, pid)
+                            self._create_event(
+                                tracker, roi, pose, confidence, pid,
+                                angle_debug=angle_debug,
+                                in_roi_hip=in_roi_hip,
+                                in_roi_wrist=in_roi_wrist,
+                            )
                     else:
-                        if tracker.active_event_id is not None:
-                            self._close_event(tracker)
-                        tracker.reset()
+                        # Người ngoài ROI: kiểm tra debounce trước khi reset
+                        still_debouncing = tracker.notify_out_roi()
+                        if not still_debouncing:
+                            # Hết debounce hoàn toàn → đóng event và reset
+                            if tracker.active_event_id is not None:
+                                self._close_event(tracker)
+                            tracker.reset_hard()
+                        # Nếu vẫn đang debounce → giữ nguyên bộ đếm
 
             # Cleanup: reset và xóa tracker của người đã biến mất khỏi khung hình
             for key in list(self._trackers.keys()):
                 if key not in active_keys:
                     t = self._trackers[key]
-                    if t.active_event_id is not None:
-                        self._close_event(t)
-                    t.reset()
-                    del self._trackers[key]
+                    # Kiểm tra debounce trước khi xóa hẳn
+                    still_debouncing = t.notify_out_roi()
+                    if not still_debouncing:
+                        if t.active_event_id is not None:
+                            self._close_event(t)
+                        t.reset_hard()
+                        del self._trackers[key]
 
     # ── Tạo Event ─────────────────────────────────────────
-    def _create_event(self, tracker: PersonROITracker, roi, pose: str,
-                      confidence: float = 0.0, person_id: int = 0):
+    def _create_event(
+        self,
+        tracker:      PersonROITracker,
+        roi,
+        pose:         str,
+        confidence:   float = 0.0,
+        person_id:    int   = 0,
+        angle_debug:  dict  = None,
+        in_roi_hip:   bool  = False,
+        in_roi_wrist: bool  = False,
+    ):
         def _do_create():
             try:
                 from app import db
@@ -248,7 +349,25 @@ class AlertEngine:
                 tracker.cooldown_until  = time.time() + COOLDOWN_SECONDS
                 tracker.violation_start = None
 
-                print(f"[Alert] Event #{ev.id} | ROI: {roi.name} | Person P{person_id+1} | Pose: {pose}")
+                print(f"[Alert] Event #{ev.id} | ROI: {roi.name} | Person P{person_id} | Pose: {pose}")
+
+                # ── Ghi JSON event log (Nhiệm vụ 4) ─────────────
+                self._write_json_log({
+                    "event_id":      ev.id,
+                    "timestamp":     datetime.utcnow().isoformat() + 'Z',
+                    "track_id":      person_id,   # Track ID tạm thời, không phải danh tính
+                    "camera_id":     cam_id,
+                    "room_id":       room_id,
+                    "roi_id":        roi.id,
+                    "roi_name":      roi.name,
+                    "pose":          pose,
+                    "level":         level,
+                    "confidence":    round(confidence, 2),
+                    "dwell_elapsed": round(tracker.elapsed(), 1),
+                    "in_roi_hip":    in_roi_hip,
+                    "in_roi_wrist":  in_roi_wrist,
+                    "angle_debug":   angle_debug or {},
+                })
 
                 # Đọc chế độ gửi Telegram
                 try:
@@ -306,6 +425,25 @@ class AlertEngine:
             return Event.query.filter_by(status='pending').count()
         except Exception:
             return 0
+
+    # ── Ghi JSON event log ────────────────────────────────
+    def _write_json_log(self, record: dict):
+        """
+        Ghi một bản ghi event vào file JSON Lines (reports/event_log.jsonl).
+        Mỗi dòng là một JSON object độc lập → dễ đọc bằng pandas / jq.
+        Dữ liệu này dùng để tính precision/recall trên video test có gán nhãn.
+        Không lưu danh tính cá nhân — chỉ track_id tạm thời theo phiên.
+        """
+        try:
+            os.makedirs(_LOG_DIR, exist_ok=True)
+            with open(_LOG_PATH, 'a', encoding='utf-8') as f:
+                f.write(json.dumps(record, ensure_ascii=False) + '\n')
+        except Exception as e:
+            print(f"[Alert] Loi ghi JSON log: {e}")
+
+    def get_log_path(self) -> str:
+        """Trả về đường dẫn file JSON event log."""
+        return _LOG_PATH
 
 
 # Singleton toàn cục
