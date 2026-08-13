@@ -276,7 +276,12 @@ def send_event_telegram(event_id):
     )
 
     # ─── Thử gửi ảnh minh chứng nếu có ──────────────────────
-    img_path = os.path.join('static', 'uploads', 'events', f'{ev.id}.jpg')
+    from flask import current_app
+    try:
+        base_dir = os.path.join(current_app.static_folder, 'uploads', 'events')
+    except Exception:
+        base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'static', 'uploads', 'events'))
+    img_path = os.path.join(base_dir, f'{ev.id}.jpg')
     frame_bytes = None
     if os.path.exists(img_path):
         try:

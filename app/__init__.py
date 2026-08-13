@@ -28,32 +28,43 @@ def create_app():
     # --- Cấu hình cơ bản ---
     flask_app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'dev-key-fallback')
 
-    # Lấy đường dẫn CSDL từ biến môi trường (Render, Cloud...)
-    db_url = os.getenv('DATABASE_URL')
-    if db_url:
-        # Aiven thêm ?ssl-mode=REQUIRED vào cuối, nhưng PyMySQL không hiểu tham số này. Ta cần cắt nó đi.
-        if '?ssl-mode=' in db_url:
-            db_url = db_url.split('?')[0]
+    # --- Cấu hình cơ sở dữ liệu ---
+    db_path = os.path.abspath(
+        os.path.join(os.path.dirname(__file__), '..', 'database', 'lab_monitor.db')
+    )
+    sqlite_uri = f'sqlite:///{db_path}'
 
-        # Đảm bảo SQLAlchemy sử dụng PyMySQL để kết nối
-        if db_url.startswith('mysql://'):
-            db_url = db_url.replace('mysql://', 'mysql+pymysql://', 1)
-        
-        flask_app.config['SQLALCHEMY_DATABASE_URI'] = db_url
-        
-        # Bắt buộc bật SSL (Aiven yêu cầu) nhưng bỏ qua việc tải file chứng chỉ rườm rà
-        if 'mysql+pymysql' in db_url:
-            flask_app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
-                'connect_args': {'ssl': {}},
-                'pool_pre_ping': True,
-                'pool_recycle': 280
-            }
-    else:
-        # Fallback về SQLite khi chạy trên máy cá nhân
-        db_path = os.path.abspath(
-            os.path.join(os.path.dirname(__file__), '..', 'database', 'lab_monitor.db')
-        )
-        flask_app.config['SQLALCHEMY_DATABASE_URI'] = f'sqlite:///{db_path}'
+    db_url = os.getenv('DATABASE_URL')
+    use_sqlite = True
+
+    if db_url and not flask_app.config.get('TESTING'):
+        if 'mysql' in db_url:
+            try:
+                import pymysql
+                if '?ssl-mode=' in db_url:
+                    db_url = db_url.split('?')[0]
+                if db_url.startswith('mysql://'):
+                    db_url = db_url.replace('mysql://', 'mysql+pymysql://', 1)
+                
+                flask_app.config['SQLALCHEMY_DATABASE_URI'] = db_url
+                flask_app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
+                    'pool_pre_ping': True,
+                    'pool_recycle': 280,
+                    'connect_args': {
+                        'charset': 'utf8mb4',
+                        'ssl': {}  # Aiven yêu cầu SSL
+                    }
+                }
+                use_sqlite = False
+            except ImportError:
+                print("[Database] pymysql chua duoc cai dat. Tu dong chuyen sang SQLite fallback.")
+                flask_app.config['SQLALCHEMY_DATABASE_URI'] = sqlite_uri
+        else:
+            flask_app.config['SQLALCHEMY_DATABASE_URI'] = db_url
+            use_sqlite = False
+    
+    if use_sqlite:
+        flask_app.config['SQLALCHEMY_DATABASE_URI'] = sqlite_uri
     flask_app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False  # Tắt để tránh cảnh báo
 
     # --- Gắn extension vào flask_app ---
@@ -115,8 +126,8 @@ def create_app():
         # Import models để SQLAlchemy nhận diện và tạo bảng
         import app.models
 
-        # Chỉ tạo thư mục database nội bộ nếu đang dùng SQLite (không có db_url)
-        if not db_url:
+        # Chỉ tạo thư mục database nội bộ nếu đang dùng SQLite
+        if use_sqlite:
             os.makedirs(os.path.dirname(db_path), exist_ok=True)
             
         db.create_all()

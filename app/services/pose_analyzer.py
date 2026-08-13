@@ -443,13 +443,6 @@ class PoseAnalyzer:
             y_norm = cy / h if h > 0 else 0.5
             buf.update(y_norm)
             is_stooping = buf.is_stooping()
-
-            # Dọn dẹp buffer của ID đã bị hủy
-            active_ids = set(tracked.keys())
-            for dead_pid in list(self._buffers.keys()):
-                if dead_pid not in active_ids:
-                    self._buffers[dead_pid].reset()
-
             # Ghi kết quả
             self.persons[pid] = {
                 'pose':        pose,
@@ -462,6 +455,15 @@ class PoseAnalyzer:
 
             # Vẽ Bounding Box
             self._draw_person_box(frame, pid, x1, y1, x2, y2, pose, conf, is_stooping)
+
+        # Dọn dẹp buffer & history của các ID đã biến mất khỏi camera
+        active_ids = set(tracked.keys())
+        for dead_pid in list(self._buffers.keys()):
+            if dead_pid not in active_ids:
+                del self._buffers[dead_pid]
+        for dead_pid in list(self._smooth_hist.keys()):
+            if dead_pid not in active_ids:
+                del self._smooth_hist[dead_pid]
 
         # Vẽ HUD tổng
         self._draw_hud(frame, len(tracked))

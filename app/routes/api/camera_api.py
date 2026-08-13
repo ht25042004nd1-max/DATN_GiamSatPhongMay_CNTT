@@ -25,7 +25,7 @@ def get_cameras():
     query = Camera.query
     if room_id:
         query = query.filter_by(room_id=room_id)
-    cameras = query.order_by(Camera.id.desc()).all()
+    cameras = query.order_by(Camera.is_active.desc(), Camera.id.asc()).all()
     return jsonify([c.to_dict() for c in cameras])
 
 @camera_bp.route('/api/cameras', methods=['POST'])

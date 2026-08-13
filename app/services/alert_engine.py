@@ -173,8 +173,8 @@ class AlertEngine:
                     in_roi = point_in_polygon(px, py, roi.points)
 
                     # Điều kiện vi phạm:
-                    # tư thế nguy hiểm + trong ROI + buffer xác nhận cúi ≥ 3s
-                    if in_roi and pose in ALERT_POSES and is_stooping:
+                    # tư thế nguy hiểm + trong ROI
+                    if in_roi and pose in ALERT_POSES:
                         if tracker.is_in_cooldown():
                             continue
                         tracker.start_tracking(pose)
@@ -185,13 +185,14 @@ class AlertEngine:
                             self._close_event(tracker)
                         tracker.reset()
 
-            # Cleanup: reset tracker của người đã biến mất
+            # Cleanup: reset và xóa tracker của người đã biến mất khỏi khung hình
             for key in list(self._trackers.keys()):
                 if key not in active_keys:
                     t = self._trackers[key]
                     if t.active_event_id is not None:
                         self._close_event(t)
                     t.reset()
+                    del self._trackers[key]
 
     # ── Tạo Event ─────────────────────────────────────────
     def _create_event(self, tracker: PersonROITracker, roi, pose: str,
@@ -201,9 +202,22 @@ class AlertEngine:
             from app.models.event import Event
 
             level = POSE_LEVEL.get(pose, roi.level)
+            cam_id = getattr(roi, 'camera_id', None) or 1
+            room_id = None
+            if cam_id:
+                try:
+                    from app.models.camera import Camera
+                    cam_obj = Camera.query.get(cam_id)
+                    if cam_obj:
+                        room_id = cam_obj.room_id
+                except Exception:
+                    pass
+
             ev = Event(
                 roi_id           = roi.id,
                 roi_name         = roi.name,
+                camera_id        = cam_id,
+                room_id          = room_id,
                 pose             = pose,
                 level            = level,
                 person_count     = 1,
@@ -230,8 +244,9 @@ class AlertEngine:
             # Chụp ảnh + Telegram
             try:
                 from app.services.telegram_service import send_alert
-                from app.services.camera_service import camera
-                frame_bytes = camera.capture_snapshot(event_id=ev.id)
+                from app.services.camera_service import camera_manager
+                cam_service = camera_manager.get_camera(cam_id)
+                frame_bytes = cam_service.capture_snapshot(event_id=ev.id) if cam_service else None
                 send_alert(ev, frame_bytes=frame_bytes, send_mode=send_mode)
             except Exception as tg_err:
                 print(f"[Alert] Telegram: {tg_err}")

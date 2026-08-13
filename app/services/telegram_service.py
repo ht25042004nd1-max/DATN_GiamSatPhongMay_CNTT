@@ -294,11 +294,9 @@ def send_simple_message(text: str) -> bool:
         cfg = _get_config()
         if not cfg['token'] or not cfg['chat_id']:
             logger.warning("[Telegram] send_simple_message: chưa cấu hình token/chat_id")
-            return False
-        # Chuyển Markdown (*bold*) sang HTML (<b>bold</b>) đơn giản
-        html_text = text.replace('*', '<b>', 1)
-        while '*' in html_text:
-            html_text = html_text.replace('*', '</b>', 1)
+        # Chuyển Markdown (*bold*) sang HTML (<b>bold</b>) an toàn
+        import re
+        html_text = re.sub(r'\*(.*?)\*', r'<b>\1</b>', text)
         return send_message(cfg['token'], cfg['chat_id'], html_text)
     except Exception as e:
         logger.error(f"[Telegram] send_simple_message lỗi: {e}")

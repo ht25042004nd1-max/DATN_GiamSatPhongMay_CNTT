@@ -69,6 +69,19 @@ class CameraService:
                 print(f"[Camera] MediaPipe khoi tao that bai: {e}")
                 self.pose_enabled = False
 
+        # Chạy toàn bộ việc mở camera trong background thread để không block HTTP request
+        self.running = True
+        self.source_name = "Đang kết nối..."
+        self._thread = threading.Thread(
+            target=self._init_and_run,
+            args=(source, fallback_video),
+            daemon=True
+        )
+        self._thread.start()
+        print(f"[Camera] Dang khoi dong camera (background)...")
+
+    def _init_and_run(self, source, fallback_video):
+        """Chạy trong background thread: thử mở camera rồi vào vòng lặp đọc frame."""
         opened = self._try_open(source)
 
         if not opened and fallback_video and os.path.exists(fallback_video):
@@ -81,15 +94,11 @@ class CameraService:
             print("[Camera] Khong tim thay nguon video — Offline mode.")
             self.is_online   = False
             self.source_name = "Offline"
-            self.running     = True
-            self._thread = threading.Thread(target=self._loop_offline, daemon=True)
+            self._loop_offline()
         else:
             self.is_online = True
-            self.running   = True
-            self._thread = threading.Thread(target=self._loop_read, daemon=True)
-
-        self._thread.start()
-        print(f"[Camera] Nguon: {self.source_name} | Online: {self.is_online} | AI: {self.pose_enabled}")
+            print(f"[Camera] Nguon: {self.source_name} | Online: {self.is_online} | AI: {self.pose_enabled}")
+            self._loop_read()
 
     def _try_open(self, source):
         # CAP_DSHOW chỉ có trên Windows; trên Linux (Render) phải dùng backend mặc định
@@ -105,8 +114,11 @@ class CameraService:
         else:
             # IP Camera, RTSP, hoặc đường dẫn video file
             src_str = str(source).strip()
+            # Thêm timeout: rtsp_transport;tcp cho ổn định, timeout 5s (5,000,000 us)
             if src_str.lower().startswith('rtsp://'):
-                os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = "rtsp_transport;tcp"
+                os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = "rtsp_transport;tcp|timeout;5000000"
+            else:
+                os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = "timeout;5000000"
             cap = cv2.VideoCapture(src_str)
 
         if cap.isOpened():
@@ -145,6 +157,7 @@ class CameraService:
                 ret, frame = self.cap.read()
 
                 if not ret:
+                    self.dropped_frames += 1
                     consecutive_failures += 1
                     if consecutive_failures > 30:
                         print("[Camera] Mất kết nối camera liên tục. Chuyển sang Offline mode.")
@@ -163,6 +176,7 @@ class CameraService:
                     time.sleep(0.1)
                     continue
 
+                self.total_frames += 1
                 consecutive_failures = 0
 
                 frame_cnt += 1

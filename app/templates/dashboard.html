@@ -460,60 +460,74 @@
     }
 
     $(document).ready(function() {
-        // Khởi tạo: lấy camera đầu tiên từ DB
+        // Khởi tạo: lấy danh sách camera từ DB
         $.ajax({
             url: '/api/cameras',
             method: 'GET',
             success: function(cameras) {
                 if (cameras && cameras.length > 0) {
-                    const cam = cameras[0];
-                    window._dashboardCamId = cam.id;
-                    // Nếu là client_camera: hiện thông báo hướng dẫn streamer
-                    if (cam.rtsp_url === 'client_camera') {
+                    // Ưu tiên camera THƯỜNG (webcam/RTSP) trước, chỉ dùng client_camera nếu không có lựa chọn khác
+                    var primaryCam = cameras.find(function(c) { return c.rtsp_url !== 'client_camera'; });
+                    if (!primaryCam) {
+                        primaryCam = cameras[0]; // fallback về client_camera nếu chỉ có vậy
+                    }
+
+                    window._dashboardCamId = primaryCam.id;
+
+                    if (primaryCam.rtsp_url === 'client_camera') {
+                        // Hiện thông báo Streamer
                         $('#streamer-notice').show();
                         $('#no-camera-notice').hide();
                         $('#dashboard-video-feed').hide();
-                        // Cập nhật link streamer đúng camera_id
-                        $('#streamer-link').attr('href', '/streamer/' + cam.id);
-                        // Vẫn load video stream (sẽ hiện khi streamer bật)
+                        $('#streamer-link').attr('href', '/streamer/' + primaryCam.id);
+                        // Load video feed sau 2 giây (chờ streamer bật)
                         setTimeout(function() {
-                            $('#dashboard-video-feed')
-                                .attr('src', '/video_feed/' + cam.id)
-                                .off('load').on('load', function() {
-                                    if (this.naturalWidth > 1) { // có frame thực
-                                        $('#streamer-notice').hide();
-                                        $(this).show();
-                                    }
-                                }).show();
+                            var $feed = $('#dashboard-video-feed');
+                            $feed.attr('src', '/video_feed/' + primaryCam.id);
+                            $feed.off('load error').on('load', function() {
+                                if (this.naturalWidth > 1) {
+                                    $('#streamer-notice').hide();
+                                    $(this).show();
+                                }
+                            }).on('error', function() {
+                                // Stream chưa sẵn sàng, thử lại sau
+                            });
+                            $feed.show();
                         }, 2000);
                     } else {
-                        // Camera thông thường: hiện video ngay
+                        // Camera thông thường (webcam/RTSP): hiện video ngay
                         $('#dashboard-video-feed')
-                            .attr('src', '/video_feed/' + cam.id)
+                            .attr('src', '/video_feed/' + primaryCam.id)
                             .show();
                         $('#no-camera-notice').hide();
                         $('#streamer-notice').hide();
                     }
+
+                    // Gọi ngay lần đầu, rồi poll mỗi 2 giây
+                    updateDashboardData();
                 } else {
-                    // Không có camera: hiện thị thông báo hướng dẫn
+                    // Không có camera nào
                     $('#no-camera-notice').show();
                     $('#dashboard-video-feed').hide();
-                    // Vẫn cập nhật các KPI khác (thời gian, cảnh báo...)
                     $('#srv-cam-badge').attr('class', 'badge badge-warning').text('Chưa có Camera');
-                    $('#srv-cam-detail').text('Vui lòng thêm camera client_camera');
-                    $('#srv-ai-badge').attr('class', 'badge badge-secondary').text('Chưa kởch hoạt');
+                    $('#srv-cam-detail').text('Vui lòng thêm camera trong mục Quản lý Camera');
+                    $('#srv-ai-badge').attr('class', 'badge badge-secondary').text('Chưa kích hoạt');
                     $('#srv-ai-detail').text('Cần camera để sử dụng AI');
                 }
+
                 // Luôn cập nhật các số liệu khác bất kể có camera hay không
                 updateOtherDashboardData();
                 setInterval(function() {
                     if (window._dashboardCamId) updateDashboardData();
                     updateOtherDashboardData();
-                }, 2000);
+                }, 3000);
             },
             error: function() {
                 $('#no-camera-notice').show();
                 $('#dashboard-video-feed').hide();
+                // Vẫn cập nhật các số liệu không phụ thuộc camera
+                updateOtherDashboardData();
+                setInterval(updateOtherDashboardData, 5000);
             }
         });
     });

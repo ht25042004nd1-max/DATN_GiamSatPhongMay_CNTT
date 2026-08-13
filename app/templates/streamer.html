@@ -126,10 +126,21 @@
     let fpsInterval = null;
     let isSending = false;
 
-    // Tự động load danh sách camera nếu trình duyệt hỗ trợ
+    // Tự động load danh sách camera
     async function loadCameras() {
-        if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) return;
+        if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) {
+            // Không hỗ trợ (non-HTTPS) — hiện cảnh báo
+            statusMsg.className = 'alert alert-warning mt-3 text-left';
+            statusMsg.innerHTML = '<i class="fas fa-exclamation-triangle mr-2"></i><b>Yêu cầu HTTPS hoặc localhost:</b> Camera chỉ hoạt động khi truy cập qua địa chỉ <code>https://</code> (Render) hoặc <code>http://localhost</code>. Truy cập qua địa chỉ IP nội bộ (192.168.x.x) sẽ bị chặn.';
+            statusMsg.style.display = 'block';
+            startBtn.disabled = true;
+            return;
+        }
         try {
+            // Yêu cầu quyền tạm thời để lấy tên camera đầy đủ
+            const tempStream = await navigator.mediaDevices.getUserMedia({video: true, audio: false}).catch(() => null);
+            if (tempStream) tempStream.getTracks().forEach(t => t.stop());
+
             const devices = await navigator.mediaDevices.enumerateDevices();
             const videoDevices = devices.filter(device => device.kind === 'videoinput');
             
@@ -138,7 +149,7 @@
                 videoDevices.forEach((device, index) => {
                     const option = document.createElement('option');
                     option.value = device.deviceId;
-                    option.text = device.label || `Camera ${index + 1} (${device.deviceId.substring(0, 5)}...)`;
+                    option.text = device.label || `Camera ${index + 1}`;
                     cameraSelect.appendChild(option);
                 });
                 cameraSelectGroup.style.display = 'block';
