@@ -176,6 +176,16 @@ class CameraService:
                     time.sleep(0.1)
                     continue
 
+                # ── Frame Pacing (25-30 FPS) & Stale Buffer Flush ──
+                t_frame_start = time.time()
+                
+                # Nếu là luồng RTSP / IP camera: grab bỏ các frame cũ dồn trong buffer
+                if hasattr(self, 'source_name') and ("RTSP" in self.source_name or "IP" in self.source_name):
+                    # Flush tối đa 2 frame đệm để giữ real-time latency
+                    for _ in range(2):
+                        if not self.cap.grab():
+                            break
+
                 self.total_frames += 1
                 consecutive_failures = 0
 
@@ -186,25 +196,32 @@ class CameraService:
                     frame_cnt  = 0
                     t_prev     = t_now
 
-                # ── Xử lý AI Pose trên frame ──
-                if self.pose_enabled and self._pose:
-                    # process_frame() vẽ skeleton + bounding box lên frame (in-place)
-                    try:
-                        processed = self._pose.process_frame(frame.copy())
-                        result    = self._pose.get_result()   # {pose, confidence, persons, ...}
-                    except Exception:
-                        processed = frame.copy()
-                        result = {"pose": "AI error", "confidence": 0.0, "is_detected": False, "persons": {}}
+                # ── Xử lý AI Pose trên frame (15 FPS với FRAME_SKIP = 2) ──
+                FRAME_SKIP = 2
+                should_run_ai = (self.total_frames % FRAME_SKIP == 0)
 
-                    # ── Gửi kết quả sang AlertEngine (v2: truyền persons dict đầy đủ) ──
-                    try:
-                        from app.services.alert_engine import alert_engine
-                        # AlertEngine v2 tự đọc result['persons']
-                        # Fallback hip_norm cho tương thích ngược
-                        hip_norm = result.get('hip_norm')
-                        alert_engine.process_frame(result, hip_norm)
-                    except Exception:
-                        pass
+                if self.pose_enabled and self._pose:
+                    if should_run_ai or not hasattr(self, '_last_ai_processed') or self._last_ai_processed is None:
+                        try:
+                            processed = self._pose.process_frame(frame.copy())
+                            result    = self._pose.get_result()   # {pose, confidence, persons, ...}
+                            self._last_ai_processed = processed
+                            self._last_ai_result    = result
+                        except Exception:
+                            processed = frame.copy()
+                            result = {"pose": "AI error", "confidence": 0.0, "is_detected": False, "persons": {}}
+                    else:
+                        processed = self._last_ai_processed
+                        result    = getattr(self, '_last_ai_result', {"pose": "Chờ", "confidence": 0.0, "is_detected": False, "persons": {}})
+
+                    # ── Gửi kết quả sang AlertEngine khi có kết quả AI mới ──
+                    if should_run_ai:
+                        try:
+                            from app.services.alert_engine import alert_engine
+                            hip_norm = result.get('hip_norm')
+                            alert_engine.process_frame(result, hip_norm)
+                        except Exception:
+                            pass
                 else:
                     processed = frame.copy()
                     result    = {"pose": "AI off", "confidence": 0.0,
@@ -215,7 +232,13 @@ class CameraService:
                     self.processed   = processed
                     self.pose_result = result
 
-                time.sleep(0.01)
+                # Điều tiết tốc độ đọc frame khoảng 30 FPS (mỗi frame ~33.3ms)
+                TARGET_FRAME_TIME = 1.0 / 30.0  # 30 FPS target
+                elapsed = time.time() - t_frame_start
+                if elapsed < TARGET_FRAME_TIME:
+                    time.sleep(TARGET_FRAME_TIME - elapsed)
+                else:
+                    time.sleep(0.001)
         except Exception as e:
             print(f"[Camera] Thread _loop_read ket thuc an toan: {e}")
         finally:
@@ -245,21 +268,20 @@ class CameraService:
     def stop(self):
         self.running = False
 
-    # ─── Chụp ảnh minh chứng và lưu file ───────────────────────────
     def capture_snapshot(self, event_id: int = None, save_dir: str = None) -> bytes:
         """
-        Chụp và lưu ảnh minh chứng chất lượng cao.
+        Chụp và lưu ảnh minh chứng chất lượng cao (kèm khung đỏ cảnh báo & skeleton).
         
         Args:
             event_id: ID sự kiện để đặt tên file (VD: 42.jpg)
             save_dir:  Thư mục lưu, mặc định app/static/uploads/events/
         
         Returns:
-            bytes: Nội dung JPEG của frame, hoặc bạch nếu camera offline.
+            bytes: Nội dung JPEG của frame, hoặc ảnh đen nếu camera offline.
         """
         with self.lock:
-            # Ưu tiên frame gốc không có skeleton (sạch hơn cho lưu trữ)
-            src = self.frame if self.frame is not None else self.processed
+            # Ưu tiên frame đã xử lý AI (có skeleton + Bounding Box đỏ vi phạm để làm bằng chứng gửi Telegram)
+            src = self.processed if self.processed is not None else self.frame
             if src is None:
                 src = np.zeros((720, 1280, 3), dtype=np.uint8)
             snap = src.copy()

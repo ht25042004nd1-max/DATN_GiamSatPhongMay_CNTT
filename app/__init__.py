@@ -154,11 +154,12 @@ def create_app():
         db.create_all()
 
     # --- Khởi động Telegram Long Polling ---
-    try:
-        from app.services.telegram_service import start_polling
-        start_polling()
-    except Exception as e:
-        print(f"Không thể khởi động Telegram polling: {e}")
+    # Đã tắt ở đây để chuyển sang dùng telegram_bot.py ở cấp cao nhất (chạy trong run.py)
+    # try:
+    #     from app.services.telegram_service import start_polling
+    #     start_polling()
+    # except Exception as e:
+    #     print(f"Không thể khởi động Telegram polling: {e}")
 
     # --- Khởi động Auto-Ping Service ---
     try:

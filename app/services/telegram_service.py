@@ -229,16 +229,22 @@ def send_alert(event, frame_bytes: bytes = None, send_mode: str = None):
 
     def _do_send():
         try:
-            if effective_mode == 'mandatory' and frame_bytes:
-                # Chế độ BẮt BUỘC: luôn gửi kèm ảnh
-                ok = send_photo(cfg['token'], cfg['chat_id'], frame_bytes, caption)
-                if not ok:
-                    # Fallback: gửi text nếu gửi ảnh thất bại
-                    send_message(cfg['token'], cfg['chat_id'],
-                                 caption + "\n\n⚠️ <i>Lỗi gửi ảnh, chỉ gửi text</i>")
-            else:
-                # Chế độ THƯỜNG: chỉ gửi text
-                send_message(cfg['token'], cfg['chat_id'], caption)
+            raw_chat_ids = cfg.get('chat_id', '')
+            chat_id_list = [c.strip() for c in raw_chat_ids.replace(';', ',').split(',') if c.strip()]
+            if not chat_id_list:
+                return
+
+            for target_chat_id in chat_id_list:
+                if effective_mode == 'mandatory' and frame_bytes:
+                    # Chế độ BẮT BUỘC: luôn gửi kèm ảnh
+                    ok = send_photo(cfg['token'], target_chat_id, frame_bytes, caption)
+                    if not ok:
+                        # Fallback: gửi text nếu gửi ảnh thất bại
+                        send_message(cfg['token'], target_chat_id,
+                                     caption + "\n\n⚠️ <i>Lỗi gửi ảnh, chỉ gửi text</i>")
+                else:
+                    # Chế độ THƯỜNG: chỉ gửi text
+                    send_message(cfg['token'], target_chat_id, caption)
         except Exception as e:
             logger.error(f"[Telegram] Loi khi gui Event #{event.id}: {e}")
 
@@ -246,7 +252,7 @@ def send_alert(event, frame_bytes: bytes = None, send_mode: str = None):
     t.start()
 
 
-# ─── Long Polling (Luôn Kết Nối) ──────────────────────────
+# ─── Long Polling (Lắng nghe /start, /help, /status) ──────
 _bot_running = False
 def start_polling():
     global _bot_running
@@ -258,30 +264,82 @@ def start_polling():
         while _bot_running:
             try:
                 cfg = _get_config()
-                if not cfg['enabled'] or not cfg['token']:
+                if not cfg['token']:
                     time.sleep(10)
                     continue
                 
                 url = TELEGRAM_API.format(token=cfg['token'], method='getUpdates')
-                resp = requests.get(url, params={'offset': last_update_id + 1, 'timeout': 30}, timeout=35)
+                resp = requests.get(url, params={'offset': last_update_id + 1, 'timeout': 25}, timeout=30)
                 if resp.status_code == 200:
                     data = resp.json()
                     if data.get('ok'):
                         for update in data.get('result', []):
                             last_update_id = update['update_id']
                             msg = update.get('message', {})
-                            text = msg.get('text', '').strip()
+                            text = (msg.get('text') or '').strip()
                             chat_id = str(msg.get('chat', {}).get('id', ''))
-                            if text == '/status':
-                                send_message(cfg['token'], chat_id, "✅ <b>Lab Monitor Bot đang hoạt động!</b>\nHệ thống đang ở trạng thái LUÔN KẾT NỐI để nhận cảnh báo.")
-                            elif text == '/help':
-                                send_message(cfg['token'], chat_id, "ℹ️ <b>Danh sách lệnh:</b>\n/status - Kiểm tra trạng thái\n/help - Trợ giúp")
+                            if not text or not chat_id:
+                                continue
+
+                            cmd = text.split()[0].lower()
+                            if cmd.startswith('/start'):
+                                reply = (
+                                    "👋 <b>Chào mừng bạn đến với Bot Ban Ban!</b>\n"
+                                    "Kênh cảnh báo an toàn phòng thực hành máy tính.\n\n"
+                                    f"🆔 <b>Chat ID của bạn:</b> <code>{chat_id}</code>\n\n"
+                                    "👉 <b>Cách đăng ký nhận cảnh báo:</b>\n"
+                                    "1. Sao chép dãy số Chat ID ở trên.\n"
+                                    "2. Dán vào file <code>.env</code> (biến <code>TELEGRAM_CHAT_ID</code>) hoặc nhập trong trang Cài đặt Web.\n"
+                                    "3. Bạn sẽ nhận được ảnh chụp và thông báo khi có vi phạm!\n\n"
+                                    "Gõ /help để xem hướng dẫn lệnh."
+                                )
+                                send_message(cfg['token'], chat_id, reply)
+
+                            elif cmd.startswith('/help'):
+                                reply = (
+                                    "ℹ️ <b>DANH SÁCH LỆNH BOT BAN BAN:</b>\n\n"
+                                    "• <code>/start</code> — Xem Chat ID của bạn để cấu hình nhận cảnh báo.\n"
+                                    "• <code>/status</code> — Kiểm tra trạng thái camera và số lượng cảnh báo trong ngày.\n"
+                                    "• <code>/help</code> — Xem hướng dẫn sử dụng bot."
+                                )
+                                send_message(cfg['token'], chat_id, reply)
+
+                            elif cmd.startswith('/status'):
+                                # Kiểm tra Whitelist
+                                raw_chat_ids = cfg.get('chat_id', '')
+                                whitelist = [c.strip() for c in raw_chat_ids.replace(';', ',').split(',') if c.strip()]
+                                if whitelist and chat_id not in whitelist:
+                                    send_message(cfg['token'], chat_id, f"⛔ <b>Từ chối truy cập:</b> Chat ID <code>{chat_id}</code> chưa nằm trong Whitelist cấu hình.")
+                                    continue
+
+                                # Thống kê camera & sự kiện hôm nay
+                                now_str = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+                                total_today = 0
+                                pending_count = 0
+                                try:
+                                    from app.models.event import Event
+                                    from datetime import date, time as dtime
+                                    today_start = datetime.combine(date.today(), dtime.min)
+                                    events_today = Event.query.filter(Event.started_at >= today_start).all()
+                                    total_today = len(events_today)
+                                    pending_count = sum(1 for e in events_today if e.status == 'pending')
+                                except Exception:
+                                    pass
+
+                                reply = (
+                                    "🤖 <b>TRẠNG THÁI HỆ THỐNG PHÒNG THỰC HÀNH</b>\n"
+                                    f"⏱ <i>Cập nhật: {now_str}</i>\n\n"
+                                    f"📹 <b>Giám sát:</b> Camera & AI MediaPipe Pose đang chạy.\n"
+                                    f"📊 <b>Cảnh báo hôm nay:</b> <b>{total_today}</b> sự kiện (Chờ xử lý: <b>{pending_count}</b>)\n"
+                                    "✅ <b>Kênh cảnh báo Telegram:</b> Đang sẵn sàng."
+                                )
+                                send_message(cfg['token'], chat_id, reply)
             except Exception as e:
-                time.sleep(5) # Tránh loop quá nhanh khi rớt mạng
+                time.sleep(5)
 
     t = threading.Thread(target=poll, daemon=True, name="tg-polling")
     t.start()
-    logger.info("[Telegram] Long Polling (luôn kết nối) đã được khởi động.")
+    logger.info("[Telegram] Long Polling Bot BanBan đã khởi động.")
 
 
 # ─── Tiện ích: gửi tin nhắn đơn giản không cần truyền token ─

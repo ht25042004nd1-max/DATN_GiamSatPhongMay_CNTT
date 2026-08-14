@@ -46,26 +46,24 @@ _YOLO_MODEL_PATH      = os.path.join(_MODEL_DIR, 'yolov8m-pose.pt')
 _MEDIAPIPE_MODEL_PATH = os.path.join(_MODEL_DIR, 'pose_landmarker_lite.task')
 
 # ─── Cấu hình YOLOv8 Predict / Track ──────────────────────
-# Nhiệm vụ 1a: nâng ngưỡng conf và giảm iou để giảm false positive
-# đặc biệt trên camera hồng ngoại thiếu sáng
-YOLO_CONF         = 0.5     # Tăng từ default 0.25 → giảm box giả yếu
-YOLO_IOU          = 0.45    # Giảm từ default 0.7 → loại mạnh tay hơn box chồng lấp
+YOLO_CONF         = 0.45    # Ngưỡng phát hiện người (tối thiểu 0.45)
+YOLO_IOU          = 0.45    # NMS IoU
 YOLO_AGNOSTIC_NMS = True    # NMS không phân biệt lớp (chỉ detect "person")
 YOLO_MAX_DET      = 10      # Giới hạn hợp lý theo sức chứa phòng máy
 
-# ─── Cấu hình K-frame Confirmation (Nhiệm vụ 1c) ──────────
-K_FRAME_CONFIRM = 5         # Track ID phải xuất hiện >= 5 frame liên tục
-                             # mới được tính là "người hợp lệ" trên dashboard
-                             # (~0.5s ở 10 FPS) → chặn detection chớp nhoáng
+# ─── Cấu hình K-frame Confirmation (theo dõi >= 0.5s ở 15 FPS) ─
+K_FRAME_CONFIRM   = 8       # 8 frame liên tục (~0.5s ở 15 FPS) mới xác nhận người hợp lệ
 
-# ─── Cấu hình Keypoint Filter (Nhiệm vụ 1b) ───────────────
-MIN_KPTS_VALID    = 6       # Tối thiểu 6/17 keypoint đủ tin cậy → detection hợp lệ
-KPT_CONF_THRESHOLD = 0.4    # Ngưỡng tin cậy từng keypoint
+# ─── Cấu hình Keypoint Filter ─────────────────────────────
+MIN_KPTS_VALID    = 6       # Tối thiểu 6/17 keypoint đủ tin cậy (>= 0.40)
+KPT_CONF_THRESHOLD = 0.40   # Ngưỡng tin cậy từng keypoint
 
-# ─── Cấu hình TemporalBuffer (dwell-time) ─────────────────
-BUFFER_SECONDS       = 5.0   # Giữ lịch sử 5 giây gần nhất
-STOOP_THRESHOLD_SEC  = 3.0   # Cúi >= 3s liên tục → vi phạm (bổ sung bởi alert_engine)
-STOOP_DROP_RATIO     = 0.05  # Tâm hông phải hạ >= 5% chiều cao frame
+# ─── Cấu hình TemporalBuffer & Dwell-time ─────────────────
+BUFFER_SECONDS          = 5.0   # Giữ lịch sử 5 giây gần nhất
+STOOP_THRESHOLD_SEC     = 3.0   # Hạ người liên tục >= 3s → hành vi bất thường
+HIGH_ALERT_THRESHOLD_SEC = 5.0  # Mức cảnh báo cao >= 5s
+STOOP_DROP_RATIO        = 0.05  # Tâm hông phải hạ >= 5% chiều cao frame
+UNSEEN_TOLERANCE_SEC    = 0.5   # Mất dấu < 0.5s duy trì Track ID tránh tạo đối tượng mới
 
 # ─── Màu sắc (BGR — OpenCV) ────────────────────────────────
 C_LANDMARK   = (0, 212, 255)    # Xanh lam-vàng
@@ -152,28 +150,238 @@ class TemporalBuffer:
 
 
 # ════════════════════════════════════════════════════════════
+# CLASS: PersonTrackState — Máy trạng thái hành vi 6 cấp cho từng người
+# ════════════════════════════════════════════════════════════
+class PersonTrackState:
+    """
+    Quản lý máy trạng thái hành vi cho từng người (track_id).
+    Các trạng thái:
+      - UNCONFIRMED : chưa đủ K frame (0.5s) hoặc vị trí chưa ổn định
+      - NORMAL      : bình thường (thiết lập base_pose sau 15 frame / 1.5s và đứng ổn định >= 0.8s)
+      - LOWERING    : đang hạ người (v_hip > 0.15 body-height/s hoặc hông hạ >= 8%)
+      - CANDIDATE   : hành vi ứng viên (hông hạ >= 15% + bằng chứng hỗ trợ)
+      - CONFIRMED   : hành vi bất thường đã xác nhận (cửa sổ dwell-time >= 3.0s liên tục)
+      - RECOVERING  : đang phục hồi (hông hạ < 12%, cần 3s liên tục < 8% để về NORMAL)
+      - LOST        : mất theo dõi (> 1.5s)
+    """
+    def __init__(self, track_id: int):
+        self.track_id = track_id
+        self.state = "UNCONFIRMED"
+        self.first_seen = time.time()
+        self.last_seen = time.time()
+        self.unseen_duration = 0.0
+
+        # Base pose profile
+        from app.services.posture_classifier import BasePoseProfile
+        self.base_pose = BasePoseProfile()
+        self.base_pose_samples = []
+        self.normal_start_time: Optional[float] = None
+        self.standing_frames_count = 0
+
+        # Velocity tracking
+        self.last_hip_y: Optional[float] = None
+        self.last_hip_time: Optional[float] = None
+        self.current_v_hip: float = 0.0
+
+        # History buffer (lưu tối đa 150 frame ~ 10 giây ở 15 FPS)
+        # Mỗi item: (timestamp, is_valid, is_target_posture, hip_drop_ratio, label, conf)
+        self.history = deque(maxlen=150)
+
+        # State timers & tracking
+        self.lowering_start_time: Optional[float] = None
+        self.candidate_start_time: Optional[float] = None
+        self.recovering_start_time: Optional[float] = None
+
+        # Event session identity
+        self.session_id = f"sess_{track_id}_{int(time.time() * 1000)}"
+        self.is_confirmed_event = False
+        self.is_high_alert = False
+        self.is_preliminary_alert = False
+        self.max_hip_drop = 0.0
+        self.max_confidence = 0.0
+        self.event_ended_reason = None
+        self.confirmed_at: Optional[float] = None
+
+    def compute_hip_velocity(self, kpts, confs, now: float) -> float:
+        """
+        Tính vận tốc chuyển động hạ hông theo phương dọc (Y), chuẩn hóa theo body_height / giây.
+        Giá trị dương > 0: chuyển động đi xuống (hạ người).
+        Giá trị âm < 0: chuyển động đi lên.
+        """
+        if kpts is None or confs is None:
+            return 0.0
+        lhp_c = float(confs[KPT_LEFT_HIP])
+        rhp_c = float(confs[KPT_RIGHT_HIP])
+        if lhp_c < 0.60 and rhp_c < 0.60:
+            return 0.0
+
+        lhp = kpts[KPT_LEFT_HIP]
+        rhp = kpts[KPT_RIGHT_HIP]
+        curr_y = float((lhp[1] * lhp_c + rhp[1] * rhp_c) / (lhp_c + rhp_c + 1e-7))
+
+        if self.last_hip_y is None or self.last_hip_time is None:
+            self.last_hip_y = curr_y
+            self.last_hip_time = now
+            return 0.0
+
+        dt = now - self.last_hip_time
+        if dt < 0.01:
+            return self.current_v_hip
+
+        ref_h = self.base_pose.body_height if (self.base_pose and self.base_pose.is_established) else 300.0
+        dy = curr_y - self.last_hip_y
+        raw_v = float((dy / max(ref_h, 10.0)) / dt)
+
+        # Smooth EMA
+        self.current_v_hip = float(0.6 * self.current_v_hip + 0.4 * raw_v)
+        self.last_hip_y = curr_y
+        self.last_hip_time = now
+        return self.current_v_hip
+
+    def update(self, frame_res: dict, now: float):
+        """Cập nhật máy trạng thái theo từng frame xử lý."""
+        is_valid = frame_res.get('is_valid_frame', False)
+
+        if is_valid:
+            self.unseen_duration = 0.0
+            self.last_seen = now
+            label = frame_res.get('label', 'Dung')
+            conf = frame_res.get('confidence', 0.0)
+            hip_drop = frame_res.get('hip_drop_ratio', 0.0)
+            has_support = frame_res.get('has_supporting_evidence', False)
+            v_hip = frame_res.get('v_hip', 0.0)
+
+            is_target = label in ('Cui nguoi', 'Quy', 'Ngoi') or hip_drop >= 0.15
+            self.history.append((now, True, is_target, hip_drop, label, conf))
+
+            # Cập nhật peak metrics
+            if hip_drop > self.max_hip_drop:
+                self.max_hip_drop = hip_drop
+            if conf > self.max_confidence:
+                self.max_confidence = conf
+
+            # ── 1. UNCONFIRMED → NORMAL (xác nhận người hợp lệ trong 0.5s) ──
+            if self.state == "UNCONFIRMED":
+                elapsed = now - self.first_seen
+                valid_cnt = sum(1 for item in self.history if item[1])
+                total_cnt = len(self.history)
+                # Xuất hiện hợp lệ >= 70% trong >= 0.5s (~7-8 frame ở 15 FPS)
+                if elapsed >= 0.5 and total_cnt > 0 and (valid_cnt / total_cnt) >= 0.70:
+                    self.state = "NORMAL"
+                    self.normal_start_time = now
+
+            # ── 2. Thiết lập tư thế cơ sở BasePose trong 1.5s đầu ở NORMAL ──
+            if self.state == "NORMAL" and not self.base_pose.is_established:
+                if self.normal_start_time is None:
+                    self.normal_start_time = now
+                if 'frame_metrics' in frame_res:
+                    self.base_pose_samples.append(frame_res['frame_metrics'])
+                    if label == "Dung" or frame_res.get('frame_metrics', {}).get('torso_angle', 180.0) >= 140.0:
+                        self.standing_frames_count += 1
+                
+                # Đạt 1.5s VÀ >= 15 frame VÀ đứng ổn định >= 0.8s (~12 frame)
+                if (now - self.normal_start_time >= 1.5 and len(self.base_pose_samples) >= 15 and self.standing_frames_count >= 10):
+                    self.base_pose.update_from_samples(self.base_pose_samples, standing_duration=(self.standing_frames_count * 0.066))
+
+            # ── 3. NORMAL → LOWERING (v_hip > 0.15 body-height/s hoặc hông hạ >= 8%) ──
+            if self.state == "NORMAL" and (v_hip > 0.15 or hip_drop >= 0.08):
+                if self.lowering_start_time is None:
+                    self.lowering_start_time = now
+                elif now - self.lowering_start_time >= 0.2:
+                    self.state = "LOWERING"
+
+            # ── 4. LOWERING / NORMAL → CANDIDATE (hông hạ >= 15% + bằng chứng hỗ trợ) ──
+            if self.state in ("NORMAL", "LOWERING") and hip_drop >= 0.15 and has_support:
+                self.state = "CANDIDATE"
+                if self.candidate_start_time is None:
+                    self.candidate_start_time = now
+
+            # ── 5. CẢNH BÁO SƠ BỘ (1s ở tư thế thấp, >= 70% thời gian) ──
+            if self.state == "CANDIDATE":
+                valid_items = [item for item in self.history if item[1] and item[0] >= now - 3.0]
+                if valid_items:
+                    target_time = sum(1 for item in valid_items if item[2])
+                    target_ratio = target_time / len(valid_items)
+                    cand_dur = now - (self.candidate_start_time or now)
+                    if cand_dur >= 1.0 and target_ratio >= 0.70:
+                        self.is_preliminary_alert = True
+
+            # ── 6. CANDIDATE → CONFIRMED (Dwell-time >= 3.0s liên tục) ──
+            if self.state == "CANDIDATE":
+                cand_dur = now - (self.candidate_start_time or now)
+                window_items = [item for item in self.history if item[0] >= now - STOOP_THRESHOLD_SEC]
+                valid_items = [item for item in window_items if item[1]]
+
+                if len(valid_items) > 0 and cand_dur >= STOOP_THRESHOLD_SEC:
+                    target_count = sum(1 for item in valid_items if item[2])
+                    target_ratio = target_count / len(valid_items)
+                    avg_conf = float(np.mean([item[5] for item in valid_items]))
+
+                    # Điều kiện xác nhận: Duy trì >= 3.0s, target posture >= 75%, avg_conf >= 70%
+                    if target_ratio >= 0.75 and avg_conf >= 65.0:
+                        self.state = "CONFIRMED"
+                        self.is_confirmed_event = True
+                        self.confirmed_at = now
+
+            # ── 7. MỨC CẢNH BÁO CAO (Dwell-time >= 5.0s liên tục) ──
+            if self.state == "CONFIRMED":
+                total_low_dur = now - (self.candidate_start_time or now)
+                if total_low_dur >= HIGH_ALERT_THRESHOLD_SEC:
+                    self.is_high_alert = True
+
+            # ── 8. CONFIRMED / CANDIDATE → RECOVERING (hạ hông < 12% hoặc mất hỗ trợ) ──
+            if self.state in ("CANDIDATE", "CONFIRMED") and (hip_drop < 0.12 or not has_support):
+                self.state = "RECOVERING"
+                self.recovering_start_time = now
+
+            # ── 9. RECOVERING → NORMAL (hạ hông < 8% duy trì liên tục >= 3s) ──
+            if self.state == "RECOVERING":
+                if hip_drop < 0.08:
+                    if self.recovering_start_time is None:
+                        self.recovering_start_time = now
+                    elif now - self.recovering_start_time >= 3.0:
+                        # Phục hồi hoàn toàn về NORMAL
+                        self.state = "NORMAL"
+                        self.recovering_start_time = None
+                        self.candidate_start_time = None
+                        self.lowering_start_time = None
+                        self.session_id = f"sess_{self.track_id}_{int(now * 1000)}"
+                        self.is_confirmed_event = False
+                        self.is_high_alert = False
+                        self.is_preliminary_alert = False
+                else:
+                    # Nếu quay lại tư thế thấp trong lúc phục hồi
+                    if hip_drop >= 0.15 and has_support:
+                        self.state = "CANDIDATE" if not self.is_confirmed_event else "CONFIRMED"
+                        self.recovering_start_time = None
+
+        else:
+            # Frame không hợp lệ (hông conf < 0.60) -> ghi nhận UNKNOWN, tạm dừng counter
+            self.history.append((now, False, False, 0.0, "Khong xac dinh", 0.0))
+
+    def handle_unseen(self, now: float):
+        """Xử lý khi không thấy detection trong frame hiện tại."""
+        self.unseen_duration = now - self.last_seen
+        if self.unseen_duration <= UNSEEN_TOLERANCE_SEC:
+            # Che khuất tạm thời (< 0.5s): duy trì Track ID, tạm dừng counter
+            pass
+        elif UNSEEN_TOLERANCE_SEC < self.unseen_duration <= 1.5:
+            # Đóng băng trạng thái gần nhất
+            pass
+        else:
+            # Quá 1.5s -> LOST
+            if self.state != "LOST":
+                self.state = "LOST"
+                if self.is_confirmed_event:
+                    self.event_ended_reason = "kết thúc do mất quan sát"
+
+
+# ════════════════════════════════════════════════════════════
 # CLASS: PoseAnalyzer — Engine chính (v3.0: YOLOv8 + ByteTrack)
 # ════════════════════════════════════════════════════════════
 class PoseAnalyzer:
     """
     Phân tích tư thế đa người dùng YOLOv8m-Pose + ByteTrack.
-
-    Mỗi frame trả về dict self.persons:
-    {
-      track_id: {
-        'pose'       : str,          # 'Dung' | 'Ngoi' | 'Cui nguoi' | 'Quy'
-        'confidence' : float,        # 0.0–100.0 (%)
-        'bbox'       : (x1,y1,x2,y2),
-        'hip_norm'   : (x, y),       # tọa độ hông chuẩn hóa 0–1
-        'wrist_norm' : (x, y) | None, # tọa độ cổ tay chuẩn hóa (cho ROI check)
-        'is_stooping': bool,         # TemporalBuffer xác nhận cúi liên tục
-        'centroid'   : (cx, cy),
-        'confirmed'  : bool,         # True nếu track đã xuất hiện >= K_FRAME_CONFIRM
-        'angle_debug': dict,         # Chi tiết góc để audit trên dashboard
-      }
-    }
-
-    Fallback: nếu YOLOv8 không load được → dùng MediaPipe Pose (v2.0 logic).
     """
 
     # ── Khởi tạo ─────────────────────────────────────────────
@@ -182,6 +390,9 @@ class PoseAnalyzer:
         self._use_mediapipe = False
         self._model        = None   # YOLO model
         self._landmarker   = None   # MediaPipe fallback
+
+        # Track state machine map: track_id -> PersonTrackState
+        self.track_states: dict[int, PersonTrackState] = {}
 
         # Thử load YOLOv8 trước
         self._load_yolo()
@@ -206,11 +417,7 @@ class PoseAnalyzer:
         # Kết quả frame hiện tại
         self.persons: dict = {}
         self.last_frame    = None
-
-        # Timestamp cho MediaPipe VIDEO mode
         self._timestamp_ms = 0
-
-        # Blink state (đèn nháy khi vi phạm)
         self._blink_frame = 0
 
     # ── Load model ────────────────────────────────────────────
@@ -305,6 +512,7 @@ class PoseAnalyzer:
                 iou          = YOLO_IOU,
                 agnostic_nms = YOLO_AGNOSTIC_NMS,
                 max_det      = YOLO_MAX_DET,
+                imgsz        = 640,     # Resize về 640x640 theo đúng đặc tả kỹ thuật
                 tracker      = "bytetrack.yaml",
                 persist      = True,
                 verbose      = False,
@@ -348,6 +556,7 @@ class PoseAnalyzer:
         # ── Cập nhật track_age và loại bỏ track non-conform ──
         current_ids = set()
         persons_new = {}
+        now = time.time()
 
         for i, tid in enumerate(track_ids):
             if not valid_mask[i]:
@@ -355,9 +564,14 @@ class PoseAnalyzer:
 
             current_ids.add(tid)
 
+            # Cập nhật hoặc tạo mới PersonTrackState
+            if tid not in self.track_states:
+                self.track_states[tid] = PersonTrackState(tid)
+            track_state = self.track_states[tid]
+
             # Cập nhật số frame liên tục
             self._track_age[tid] = self._track_age.get(tid, 0) + 1
-            confirmed = self._track_age[tid] >= K_FRAME_CONFIRM
+            confirmed = track_state.state != "UNCONFIRMED" or self._track_age[tid] >= K_FRAME_CONFIRM
 
             # Bbox
             x1, y1, x2, y2 = bboxes_xyxy[i].astype(int)
@@ -368,66 +582,96 @@ class PoseAnalyzer:
             person_kpts  = kpts_xy[i]   if kpts_data is not None else None    # (17, 2)
             person_confs = kpts_conf[i]  if kpts_data is not None else np.zeros(17)  # (17,)
 
-            # ── Nhiệm vụ 2: Phân loại tư thế ────────────────────
-            pose_result = {"label": "Khong phat hien", "confidence": 0.0, "angle_debug": {}}
+            # Tính vận tốc hạ hông chuẩn hóa (body-height/s)
+            v_hip = track_state.compute_hip_velocity(person_kpts, person_confs, now)
+
+            # ── Phân loại tư thế với BasePose, Vận tốc & Visibility check ──
+            pose_result = {"label": "Khong phat hien", "confidence": 0.0, "is_valid_frame": False, "angle_debug": {}}
             hip_norm    = None
             wrist_norm  = None
+            feet_norm   = None
 
             if person_kpts is not None:
-                # Khởi tạo angle buffer nếu chưa có
                 if tid not in self._angle_buffers:
                     self._angle_buffers[tid] = AngleHistoryBuffer()
 
                 pose_result = classify_posture(
-                    keypoints     = person_kpts,
-                    kpt_conf      = person_confs,
+                    keypoints      = person_kpts,
+                    kpt_conf       = person_confs,
                     history_buffer = self._angle_buffers[tid],
-                    frame_height  = h,
+                    frame_height   = h,
+                    bbox           = (x1, y1, x2, y2),
+                    base_pose      = track_state.base_pose,
+                    v_hip          = v_hip,
                 )
 
-                # Tọa độ hông chuẩn hóa (cho alert_engine ROI check)
+                # Tọa độ hông chuẩn hóa
                 lhp_c = person_confs[KPT_LEFT_HIP]
                 rhp_c = person_confs[KPT_RIGHT_HIP]
-                if lhp_c >= MIN_KPT_VIS or rhp_c >= MIN_KPT_VIS:
+                if lhp_c >= 0.60 or rhp_c >= 0.60:
                     lhp = person_kpts[KPT_LEFT_HIP]
                     rhp = person_kpts[KPT_RIGHT_HIP]
                     mx  = ((lhp[0] * lhp_c + rhp[0] * rhp_c) / (lhp_c + rhp_c + 1e-7))
                     my  = ((lhp[1] * lhp_c + rhp[1] * rhp_c) / (lhp_c + rhp_c + 1e-7))
                     hip_norm = (float(mx / w), float(my / h))
 
-                # Tọa độ cổ tay chuẩn hóa (cho ROI wrist check — Nhiệm vụ 3)
+                # Tọa độ vị trí CHÂN chuẩn hóa cho ROI check (Quy ước: ưu tiên mắt cá, fallback đáy bbox)
+                lank_c = person_confs[KPT_LEFT_ANKLE]
+                rank_c = person_confs[KPT_RIGHT_ANKLE]
+                if lank_c >= 0.50 and rank_c >= 0.50:
+                    fx = (person_kpts[KPT_LEFT_ANKLE][0] + person_kpts[KPT_RIGHT_ANKLE][0]) / 2.0
+                    fy = (person_kpts[KPT_LEFT_ANKLE][1] + person_kpts[KPT_RIGHT_ANKLE][1]) / 2.0
+                    feet_norm = (float(fx / w), float(fy / h))
+                elif lank_c >= 0.50:
+                    feet_norm = (float(person_kpts[KPT_LEFT_ANKLE][0] / w), float(person_kpts[KPT_LEFT_ANKLE][1] / h))
+                elif rank_c >= 0.50:
+                    feet_norm = (float(person_kpts[KPT_RIGHT_ANKLE][0] / w), float(person_kpts[KPT_RIGHT_ANKLE][1] / h))
+                else:
+                    feet_norm = (float(cx / w), float(y2 / h))  # Điểm chính giữa cạnh dưới Bounding Box
+
+                # Tọa độ cổ tay chuẩn hóa
                 lwr_c = person_confs[KPT_LEFT_WRIST]
                 rwr_c = person_confs[KPT_RIGHT_WRIST]
                 if lwr_c >= MIN_KPT_VIS or rwr_c >= MIN_KPT_VIS:
-                    # Lấy cổ tay có confidence cao hơn
                     if lwr_c >= rwr_c:
                         wx, wy = person_kpts[KPT_LEFT_WRIST]
                     else:
                         wx, wy = person_kpts[KPT_RIGHT_WRIST]
                     wrist_norm = (float(wx / w), float(wy / h))
 
-                # Vẽ skeleton (chỉ khi đã confirm K frame)
                 if confirmed:
                     self._draw_skeleton_yolo(frame, person_kpts, person_confs, w, h)
 
-            # ── Cập nhật TemporalBuffer (dwell-time cúi) ────────
+            # Cập nhật máy trạng thái hành vi
+            track_state.update(pose_result, now)
+
+            # Cập nhật TemporalBuffer
             if tid not in self._temporal_buffers:
                 self._temporal_buffers[tid] = TemporalBuffer()
             self._temporal_buffers[tid].update(cy / h if h > 0 else 0.5)
-            is_stooping = self._temporal_buffers[tid].is_stooping()
 
-            # Chỉ vẽ bounding box và tính person nếu đã confirmed
+            is_stooping = track_state.is_confirmed_event or self._temporal_buffers[tid].is_stooping()
+
+            # Chỉ đưa vào persons_new nếu đã confirmed hoặc state đã vượt UNCONFIRMED
             if confirmed:
                 persons_new[tid] = {
-                    'pose':        pose_result["label"],
-                    'confidence':  pose_result["confidence"],
-                    'bbox':        (x1, y1, x2, y2),
-                    'hip_norm':    hip_norm,
-                    'wrist_norm':  wrist_norm,
-                    'is_stooping': is_stooping,
-                    'centroid':    (cx, cy),
-                    'confirmed':   True,
-                    'angle_debug': pose_result["angle_debug"],
+                    'pose':                 pose_result["label"],
+                    'confidence':           pose_result["confidence"],
+                    'bbox':                 (x1, y1, x2, y2),
+                    'hip_norm':             hip_norm,
+                    'feet_norm':            feet_norm,
+                    'wrist_norm':           wrist_norm,
+                    'is_stooping':          is_stooping,
+                    'state':                track_state.state,
+                    'session_id':           track_state.session_id,
+                    'is_confirmed_event':   track_state.is_confirmed_event,
+                    'is_high_alert':        track_state.is_high_alert,
+                    'is_preliminary_alert': track_state.is_preliminary_alert,
+                    'event_ended_reason':   track_state.event_ended_reason,
+                    'centroid':             (cx, cy),
+                    'confirmed':            True,
+                    'v_hip':                v_hip,
+                    'angle_debug':          pose_result["angle_debug"],
                 }
                 self._draw_person_box(
                     frame, tid,
@@ -437,15 +681,17 @@ class PoseAnalyzer:
                     is_stooping,
                 )
             else:
-                # Vẽ khung xám mờ cho track chưa confirm (tùy chọn debug)
                 cv2.rectangle(frame, (x1, y1), (x2, y2), C_UNCONFIRMED, 1)
 
-        # ── Dọn dẹp state của track đã biến mất ─────────────
-        dead_ids = set(self._track_age.keys()) - current_ids
-        for dead in dead_ids:
-            self._track_age.pop(dead, None)
-            self._temporal_buffers.pop(dead, None)
-            self._angle_buffers.pop(dead, None)
+        # ── Xử lý các track không xuất hiện trong frame ───────
+        unseen_ids = set(self.track_states.keys()) - current_ids
+        for tid in unseen_ids:
+            self.track_states[tid].handle_unseen(now)
+            if self.track_states[tid].state == "LOST" and (now - self.track_states[tid].last_seen > 10.0):
+                self.track_states.pop(tid, None)
+                self._track_age.pop(tid, None)
+                self._temporal_buffers.pop(tid, None)
+                self._angle_buffers.pop(tid, None)
 
         self.persons = persons_new
 
